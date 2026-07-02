@@ -43,9 +43,12 @@ cd simpa
 echo "4/6 Setting up Backend (Laravel)..."
 cd backend
 cp .env.example .env
-sed -i 's/DB_DATABASE=laravel/DB_DATABASE=smpa_db/g' .env
-sed -i 's/DB_USERNAME=root/DB_USERNAME=simpa/g' .env
-sed -i 's/DB_PASSWORD=/DB_PASSWORD=simpa_secret/g' .env
+sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/g' .env
+sed -i 's/# DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/g' .env
+sed -i 's/# DB_PORT=3306/DB_PORT=3306/g' .env
+sed -i 's/# DB_DATABASE=laravel/DB_DATABASE=smpa_db/g' .env
+sed -i 's/# DB_USERNAME=root/DB_USERNAME=simpa/g' .env
+sed -i 's/# DB_PASSWORD=/DB_PASSWORD=simpa_secret/g' .env
 composer install --optimize-autoloader --no-dev
 php artisan key:generate
 php artisan migrate --seed --force
