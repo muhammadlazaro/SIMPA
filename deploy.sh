@@ -42,11 +42,11 @@ cd simpa
 
 echo "4/6 Setting up Backend (Laravel)..."
 cd backend
-composer install --optimize-autoloader --no-dev
 cp .env.example .env
 sed -i 's/DB_DATABASE=laravel/DB_DATABASE=smpa_db/g' .env
 sed -i 's/DB_USERNAME=root/DB_USERNAME=simpa/g' .env
 sed -i 's/DB_PASSWORD=/DB_PASSWORD=simpa_secret/g' .env
+composer install --optimize-autoloader --no-dev
 php artisan key:generate
 php artisan migrate --seed --force
 php artisan storage:link
