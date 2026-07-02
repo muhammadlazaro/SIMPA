@@ -40,6 +40,13 @@ docs/references/*.pdf
 # UI backups
 docs/ui-backups/
 
+# Documentation / thesis files (not part of application)
+docs/
+tools/
+backend/drawio/
+backend/package.json
+backend/package-lock.json
+
 # Local archives and generated exports
 *.sql
 *.sqlite
