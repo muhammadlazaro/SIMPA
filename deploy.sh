@@ -60,7 +60,7 @@ cd ..
 echo "5/6 Setting up Frontend (Vue.js)..."
 cd frontend
 cp .env.production.example .env.production
-sed -i 's|VITE_API_URL=.*|VITE_API_URL=http://simpa.plutolab.my.id/api|g' .env.production
+sed -i 's|VITE_API_BASE_URL=.*|VITE_API_BASE_URL=https://simpa.plutolab.my.id/api|g' .env.production
 npm install
 npm run build
 cd ..
