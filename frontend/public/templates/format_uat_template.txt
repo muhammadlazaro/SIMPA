@@ -1,0 +1,15 @@
+Template UAT (User Acceptance Test)
+
+Kolom yang disarankan:
+- ID skenario
+- Fitur yang diuji
+- Langkah uji
+- Hasil yang diharapkan
+- Hasil aktual
+- Status (Lulus/Gagal)
+- Catatan perbaikan
+
+Catatan:
+- Isi oleh unit kerja pemilik aplikasi.
+- Simpan sebagai PDF/DOC/DOCX sebelum unggah.
+- Gunakan penamaan: UAT_<NAMA_SINGKAT>_<VERSI>_<YYYYMMDD>.

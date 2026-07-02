@@ -1,0 +1,16 @@
+Template formulir pengajuan aplikasi
+
+Isian minimum:
+1. Nama layanan
+2. Nama singkat
+3. Nama aplikasi
+4. Jenis layanan (publik/internal)
+5. Kode unit organisasi
+6. Tipe akuisisi
+7. Latar belakang usulan
+8. Ruang lingkup awal
+9. Kontak PIC unit kerja
+
+Catatan:
+- Simpan sebagai PDF/DOC/DOCX sebelum diunggah.
+- Gunakan penamaan file: FORMULIR_<NAMA_SINGKAT>_<YYYYMMDD>.

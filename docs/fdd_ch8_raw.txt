@@ -1,0 +1,1015 @@
+the area being modeled. The diagram is usually drawn using
+it is clearly visible to the whole
+
+gram of
+Post-It® notes and marker pens so that
+modeling team when presented
+
+Participation
+
+Domain Experts and modelers within the modeling team form small
+groups of two or three and pick one part of the modeling room in which
+to work together
+to build these models The Chief Architect normally
+floats, picking up on ideas and discussions from each of the groups. The
+groups could use breakout rooms, if available, but when the teams re-
+main in the same room, they often overhear useful snippets of informa-
+tion or ideas from the other groups. It is also harder to bring the teams
+in
+backtogether again if they are in breakout rooms The ChiefArchitect.
+in
+the absence of a professional Facilitator, determines the time spent
+the small groups and calls the teams back to present their results.
+
+Tips for the Chief Architect
+
+/Facilitator
+
+1.
+
+teams of four or more are less
+In practice, we have found that
+than those of two or three. The fourth member be-
+efficient
+comes a manager and starts managing the group.
+It is also hard
+for the fourth member to see what is going on and to partici-
+the large sheet
+pate when the team is on one side of a table,
+of paper in front of one person, with the other
+two members
+on either side. Hanging the paper on the wall and working
+standing up provides more space but gets physically tiring
+after a while.
+
+2. Deliberately. mixing up the sub teams every now and again
+lets people work with others, helps the team gel as a whole,
+like-minded
+and avoids the formation of
+people.
+
+little cliques of
+
+3.
+
+If you have a couple of difficult people who insist on dominat-
+ing the teams they are in, put them together and, if necessary,
+make up the third yourself
+
+4. Fifteen to twenty minutes is a reasonable amount of time to
+the small groups work before reviewing progress as a
+let
+whole team. It is not a sin, however, to go a little longer if all
+the teams request extra time. Thirty minutes is probably a
+good time to call a stop, though; beyond 30 minutes, and the
+teams may diverge too far, making it hard to come to a con-
+sensus in the next task.
+
+A Practical Guide
+to Feature-Driven
+Development
+
+120
+
+Tips for the Modeling Team
+
+l. The best
+
+tools for modeling in small groups are PosHt®
+
+notes, marker pens, and large sheets of paper
+
+(flipchart size).
+
+Use PosHt® notes to represent classes and arrange them on
+associations and
+the paper, using a pencil
+
+to draw in tentative
+
+a marker pen once you have decided an association is good.
+
+2. An in-depth description
+
+is
+of the modeling
+beyond the scope of this book, and this book is not printed in
+readers
+color, so it's much harder
+
+to see the benefit. We refer
+
+in color technique
+
+to the coloring
+
+book [Coad 991 for more information.
+
+For
+
+those who want a quick refresher:
+
+When modeling, we look for
+
+four categories of problem domain
+
+(PO)
+
+class, the four class archetypes:
+
+1. Moment/Interval
+
+(event or activity)
+
+reasons
+
+(Ml)
+
+(Pink)-a
+
+in time
+that must be tracked for business or legal
+
+moment
+
+interval
+
+or
+
+2. Role (Yellow)-a
+
+role played by someone,
+
+something, or some
+
+place, a way of participating.
+
+3. Party, Place,
+identifiable
+
+Thing
+entity.
+
+(PPT)
+
+(Green)-a
+
+role player, a uniquely
+
+4. Description
+
+(Desc)
+
+(Blue)-a
+
+catalog-like
+
+entry, a set of values
+
+or characteristics
+
+that apply again and again.
+
+The archetypes
+
+suggest
+
+typical
+
+attributes
+
+and methods
+
+for
+
+their
+
+classes The archetypes also suggest
+
+typical
+
+interactions
+
+between classes
+
+of different
+
+archetypes (Figure 7-3).
+
+The domain neutral component
+
+(DNC)
+
+is a pattern of archetypes that
+
+occurs again and again within PD object models,
+
+especially
+
+those of
+
+business systems (Figure 7-4).
+
+Mac and Steve work with a Domain Expert, Mike the mechanic,
+
+in a
+
+small group modeling session:
+
+Mac: Mike,
+and models,
+
+so far we have a Car class and a Model class
+and we have cOi'wected the Car
+
+to a class
+
+representing
+
+a Service.
+
+to track cars and car makes
+
+Steve: Right! The Car class belongs
+event or activity we need to remember,
+Model class are like entries
+What
+else do we need?
+Mike: How do we know which mechanic
+the owner of
+mechanic? Also, what about
+
+in a catalog,
+
+to the Thing archetype
+
+The Service
+
+so it's a Moment-Interval.
+so Model belongs
+
+to the Description
+
+and instances
+
+is a business
+the
+of
+archetype.
+
+serviced which
+the car? We have
+
+car and how much
+to bi!! them.
+
+to pay
+
+the
+
+Mac: Money
+chetype
+
+I
+
+Steve:
+owner. What
+
+things are important!
+
+Sounds
+arld CarOwner
+
+!ike two classes
+as classes.
+
+belonging
+
+to the Role ar-
+
+Let's add Mechanic
+
+like the Mecna n Ie class but
+
+j'm not so su re we need another
+
+class for the car
+
+sort of attributes
+
+and operations wi!! that
+
+class nave?
+
+Mac: Okay,
+
+let's put a question mark
+
+on CarOwner
+
+for now
+
+..
+
+[Figure 7-51
+
+Develop an Overall
+Object Model
+
+121
+
+Figure 7-3
+The four class archetypes
+
+A Practical Guide
+to Feature-Driven
+Development
+
+122
+
+Figure 7-4
+The domain neutral component
+
+(DNC)
+
+Develop an Overall
+Object Model
+
+123
+
+Figure 7-5
+Drawing class diagrams using Post-It® notes and marker pens
+
+Develop a Team Model
+
+Modeling Team
+
+Required
+
+The Chief Architect
+
+from each small group
+
+presents
+A member
+may also propose further
+area.
+team selects one of the proposed models or composes
+proposed models
+
+that group's
+
+proposed model
+model alternatives.
+a model by merging
+
+for the domain
+The modeling
+ideas from the
+
+Expeded Results
+
+124
+
+area of the domain under consideration
+
+that
+
+The output
+
+from this task is an agreed common object model
+
+for the
+is either consistent with and
+
+The Deve/op
+a Team
+Mode/Task
+
+A Practical Guide
+to Feature-Driven
+Development
+
+adds to the overall object model built
+shape of the overall object model built
+
+so far or improves on the previous
+so far.
+
+Participation
+
+The whole modeling
+
+team takes
+
+part
+
+on the small group models
+
+in this
+listening
+task,
+as they are presented
+
+to and
+in turn.
+
+the Chief Architect
+
+facilitates
+
+in the absence
+
+of a professional
+
+commenting
+Again,
+Facilitator.
+
+Hints for the Modeling Team
+
+that
+teams
+
+team's model
+have good
+
+to go for-
+I. One team may "get it." so choose
+so
+ideas,
+ward with. Sometimes, multiple
+pick one team's model and add the good bits of the others.
+un-
+Sometimes,
+in the
+derstanding;
+room and,
+again to improve
+the small group models
+
+there is a difference of domain
+from the Domain Experts
+
+it
+is clear that
+get clarification
+
+if necessary, work in sub teams
+
+2.
+
+3.
+
+If the team is stuck,
+duces an alternative
+
+the Chief Architect makes the call or pro-
+to try to progress
+
+the team
+
+out a particularly
+
+It is not a sin to go back and work in small groups a couple of
+is it a sin
+times to thrash
+for a
+to ask for a short, more in-depth
+particular piece
+itera-
+tions are a hallmark of FDD and one of its sources of flexibil-
+ity and power.
+
+domain walkthrough
+is not clear. Small
+
+tricky area. Neither
+
+of the domain
+
+that
+
+Hints for the Facilitator/Chief Architect
+
+1. Ensure that everyone
+
+in the modeling team gets a chance
+
+to
+
+present-even
+a few times,
+more extroverted
+quieter ones
+starts to gel.
+
+the reluctant,
+
+quieter ones. Having presented
+
+the quieter ones grow in confidence,
+
+people start
+
+to recognize
+
+the ability
+
+and listen to them more
+
+carefully-the
+
+and the
+of the
+team
+
+2. Ask the team to work to consensus.
+
+Define consensus
+
+for
+
+them as:
+
+A choice each person can live with, support, and help to im-
+
+plement
+
+Reaching consensus means you are okay with a decision.
+
+It DOES NOT mean you like it or it is your ideal solution
+
+It DOES mean you accept
+
+it, agree to support
+
+it, not quit over
+
+it or talk down about
+
+it
+
+Develop an Overall
+Object Model
+
+125
+
+You may want to do this as part of the introduction to the
+modeling activity or the first time a difference of opinion oc-
+curs
+
+3. You may also want to capture the small team presentations
+and team model on video or take photos of the diagrams with
+for the film
+a digital camera (or a normal one jf you can wait
+the
+to be developed and have access to a scanner so that
+pictures can be loaded onto a shared file server or internal
+Web site)
+
+4. After working on an especially tricky area of the domain. it is
+often wise to spend some time in the small groups creating a
+high-level sequencediagram for one or two of the cornplex re-
+quirements This will
+test the object model to see whether it
+truly does stand up to what is required
+
+Mac and Steve are on a coffee break after the teams have agreed on a
+model of the car servicing area (Figure 7-6):
+
+about adding
+
+Mac: I think that was a good result.
+groups
+classes. Now the garage
+ics and
+mechanics
+
+the Person class as a role player
+between cars
+Customers
+
+can distinguish
+to customers.
+
+can be given
+
+a discount.
+
+those that
+
+belong
+
+I especially
+
+like the point
+
+from one of
+
+the other
+
+and CarOwner
+for the Mechanic
+that belong to their own mechan-
+and
+can be given
+
+higher priority,
+
+Steve: Yes, a nice
+neutral
+component.
+servicing
+
+to distinguish
+
+example
+And
+
+of the role-player/role
+
+pattern
+
+the separation
+between regular
+
+of the reminder
+and scheduling
+services and ad hoc repairs was a good idea
+
+that we see in the domain
+from the actual
+
+Refine the Overall Object Model
+
+Chief Architect.
+
+,..!,deling Teitm.i, .~equired.:.
+
+Every
+produced
+
+so often,
+
+the
+by the iterations
+
+of the previous
+
+two tasks.
+
+team updates
+
+the overall object model with the new model
+
+shapes
+
+The Refine
+the Overall
+Object
+Mode/Task
+
+Expected Resu Its
+
+At the end of this task,the overall object model should integrate and
+include all of the agreed object models for the areas of the problem do-
+main modeled so far
+
+Pa rticipation
+
+A Practical Guide
+to Feature-Driven
+Development
+
+126
+
+This task is normally performed by a subset of the modeling team.
+usually only one or two members who enter the results obtained so far
+into some electronic modeling or diagramming tool and print the results
+or who redraw the overall model manually on potentially multiple pieces
+
+Figure 7-6
+Team model
+
+for car servicing domain area
+
+-N
+
+~
+
+of flipchart paper The rest of the modeling team members informally
+check the result for errors when they next reconvene to consider the next
+problem domain area.
+
+Note
+
+The authors strongly recommend
+for this
+activity, but other tools that con be used include Rational Rose and Mi-
+crosoft's Visiodiagramming tool.
+
+TogetherSoft's Together product
+
+Hints for the Modeling Team
+
+I. The aim is to produce a consistent overall object model.
+
+If
+you do not integrate everynow and then, the models you pro-
+duce from each walkthrough may become inconsistent with
+each other
+
+Hints for Together Users
+
+l. Manually producing an overall model diagram for a large sys-
+tem is a time-consuming,
+laborious task. It is something that
+we would like technology to help us with. Users of Together-
+Soft's Together platform can build overview diagrams from
+multiple detailed diagrams. At this stage, we are really using
+Together only as a sketching tool. so run it either in Object
+Modeler mode or switch off the text editor pane. Many varia-
+tions exist but one approach is to:
+
+• Create a package called ana/!::Isis
+
+• For each domain walkthrough, create a sub-package and
+draw the class diagram for the team model. Create short-
+cuts to classes used from previous domain walkthroughs
+
+• Record the alternatives in sub-packages underneath the
+
+chosen one.
+
+•
+
+In the analysis package,create a new class diagram called
+overview and add all the classes from the chosen packages
+as shortcuts.
+
+• Play with the layout of the overview diagram until happy
+
+and print
+
+A Practical Guide
+to Feature-Driven
+Development
+
+128
+
+2. Depending on your situation, edition of Together, and the ca-
+pabilities of your version control system, it may be preferable
+to generate gif or wmf picture files from each of the packages
+and diagrams and put those under version control or export
+those or version
+the diagrams as XMI files and version control
+control
+
+the source code and diagram files as usual.
+
+Hints for Those without Together or Equivalent
+
+1.
+
+If you do not have Together or something remotely equivalent
+
+available,
+
+it is best
+
+to volunteer
+
+a couple of people to spend
+
+some time laying out
+
+the overall
+
+object model on multiple
+
+f1ipchart sheets as best they can.
+large to manage, split
+overview models for those,
+
+If the model becomes too
+into subject areas and build
+taking care to avoid inconsisten-
+
+the model
+
+cies between the models.
+
+Steve:
+Hey, Mac, we've just
+[Figure 7-71. Do you want
+
+finished
+to takea
+
+adding
+look?
+
+Mac: Okay.
+
+the servicing model
+
+into the overall model
+
+Steve:
+starting
+It's realllj
+looking good. By the way,
+we have identified
+
+to take shape now. We still have a few areas to cover but
+I'm not showing
+
+the important
+
+or attributes
+
+it's
+that
+
+operations
+it does not get too cluttered.
+
+on this overview so that
+
+I'm spoiled for life I Now that
+
+I think
+
+Mac:
+going to be realllj hard to go back
+so much better
+
+than the UML stereotype
+
+to modeling
+tags.
+
+I've used the color modeling
+
+in black and white. The colors
+
+approach,
+
+it's
+stand out
+
+Yes, and
+is that
+
+Steve:
+groups
+intelligent
+
+lust having
+the structure
+It should
+
+Mac:
+stand
+cerned.
+understandings
+
+another
+
+nice
+
+thing about working
+
+the Domain Experts
+
+actualllj
+
+conversations
+
+with the developers about
+
+do understand
+it
+
+with the colors and in the small
+to hold
+this model enough
+
+all the developers
+of the model
+
+that are in the modeling
+
+is a huge step in the right direction,
+
+team agree on and under-
+as far as I'm con-
+and mis-
+
+of miscommunications
+
+really help cut down on the number
+later into the project
+
+Write Model Notes
+
+Chief Architect, ChiefPropammers
+
+Required
+
+The Write
+Mode/Notes
+
+Noles on detailed
+made for future
+
+or complex model
+reference by the project.
+
+shapes
+
+and
+
+on significant
+
+model alternatives
+
+are Task
+
+Expected Results
+
+The output
+
+from this task is a set of consolidated
+
+notes describing
+
+the major design and analysis decisions made by the team in each area
+
+of the problem domain modeled. These augment and annotate the over-
+
+all object model produced by the team.
+
+Participation
+
+This activity
+
+venient
+
+intervals
+
+is performed by a subset of the modeling team at con-
+throughout
+
+the modeling
+
+sessions.
+
+Develop an Overall
+Object Model
+
+129
+
+Figure 7-7
+Overall object model so far
+
+Hints for the Facilitator/Chief Architect
+
+I. Askthe Chief Programmers and other developers in the model-
+ing team to take notes during the walkthroughs and during the
+small group presentations. At the end of a modeling session,
+pickthree to write up the notes, consolidate them, and if possi-
+ble, store them electronically so they areavailable to everyone.
+
+2. Sometimes, an organization insists that you record require-
+ments as use cases and produce other supporting UML dia-
+grams or Extreme Programming user stories. You can write up
+the domain walkthrough notes as use cases or user stories
+and, if necessary, produce the relevant UML use case model.
+activity, and state chart diagrams to capture this information.
+
+Enlist the help of the Domain Experts in doing this and re~
+view the results for completeness and accuracy.You'll need to
+allocate more time for this activity, but whenit is a strict organi-
+zational policy or standard, it cannot be helped; it might evenbe
+a contractual obligation. However, you must also record the
+modeling decisions made to avoid revisiting them at a later
+date, especially when someone new joins the project.
+
+Mac: Okay,
+gether Contra/Center
+
+this session's elected note writers have typed up the notes. We used To-
+
+to publish them as HTML IFigure 7-81.
+
+Figure 7-8
+Object model and notes in HTML, courtesy of Together ControlCenter
+
+Develop an Overall
+Object Model
+
+131
+
+

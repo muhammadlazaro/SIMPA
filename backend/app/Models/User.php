@@ -2,13 +2,22 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property string $role
+ * @property \Illuminate\Support\Carbon|null $email_verified_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ */
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -26,64 +35,68 @@ class User extends Authenticatable
         'role',
     ];
 
-    protected $casts = [
-        'role' => 'string',
-    ];
-
     /**
-     * Check if user is admin
+     * Admin sistem (kelola personil dan akses sistem).
      */
-    public function isAdmin(): bool
+    public function isAdminSistem(): bool
     {
-        return $this->role === 'admin';
+        return $this->role === 'admin_sistem';
     }
 
     /**
-     * Check if user is admin1 (can manage apps and RFCs)
+     * Pengelola aplikasi (full management of aplikasi / RFC per app rules).
      */
-    public function isAdmin1(): bool
+    public function isPengelolaAplikasi(): bool
     {
-        return $this->role === 'admin' || $this->role === 'admin1';
+        return $this->role === 'pengelola_aplikasi';
     }
 
     /**
-     * Check if user is admin2 (can only manage analisa desain)
+     * Analis desain (analisa & desain workflows).
      */
-    public function isAdmin2(): bool
+    public function isAnalisDesain(): bool
     {
-        return $this->role === 'admin2';
+        return $this->role === 'analis_desain';
     }
 
     /**
-     * Check if user is regular user (backward compatibility)
+     * Unit kerja (pemilik aplikasi/pengaju).
      */
-    public function isUser(): bool
+    public function isUnitKerja(): bool
     {
-        return $this->role === 'user';
+        return $this->role === 'unit_kerja';
     }
 
     /**
-     * Check if user is frontend role
+     * Aplikasi yang diajukan oleh user ini (pemilik pengajuan / unit kerja).
      */
-    public function isFrontend(): bool
+    public function aplikasiDiajukan(): HasMany
     {
-        return $this->role === 'frontend';
+        return $this->hasMany(Aplikasi::class, 'created_by');
     }
 
     /**
-     * Check if user is backend role
+     * Check if user is implementation team member.
      */
-    public function isBackend(): bool
+    public function isTimImplementasiAplikasi(): bool
     {
-        return $this->role === 'backend';
+        return $this->role === 'tim_implementasi_aplikasi';
     }
 
     /**
-     * Check if user is devops role
+     * Check if user is devops developer.
      */
     public function isDevops(): bool
     {
-        return $this->role === 'devops';
+        return $this->role === 'devops_developer';
+    }
+
+    /**
+     * Check if user is security testing team.
+     */
+    public function isTimUjiKeamanan(): bool
+    {
+        return $this->role === 'tim_uji_keamanan';
     }
 
     /**

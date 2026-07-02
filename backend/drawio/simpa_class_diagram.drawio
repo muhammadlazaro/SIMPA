@@ -1,0 +1,167 @@
+@startuml
+' -------------------------------------------------
+' Layout directives
+' -------------------------------------------------
+left to right direction
+hide empty members
+
+' -------------------------------------------------
+' Package – Konfigurasi Infrastruktur
+' -------------------------------------------------
+package "Konfigurasi Infrastruktur" as Infra {
+    class DatabaseConfig
+    class ObjectStorageConfig
+    class ApiGatewayConfig
+    class DevopsConfig
+    class FrontendConfig
+    class BackendConfig
+    class EnvironmentConfig
+}
+
+' -------------------------------------------------
+' Entitas utama
+' -------------------------------------------------
+class User {
+    +int id
+    +string name
+    +string email
+    +string role
+}
+class Aplikasi {
+    +int id
+    +string nama_layanan
+    +string nama_singkat
+    +string nama_aplikasi
+    +string jenis_layanan_aplikasi
+    +string tipe_akuisisi
+    +string status
+    +string? doc_studi_kelayakan_path
+    +bool? security_test_passed
+    +datetime? security_tested_at
+    +datetime? deployed_staging_at
+    +datetime? deployed_production_at
+    +int? created_by
+    +int? updated_by
+}
+class AnalisaDesain {
+    +int id
+    +int aplikasi_id
+    +string ui_platform
+    +string interop_type
+    +string storage_type
+    +string nama_aktor
+    +string method
+    +string url
+}
+class Proyek {
+    +int id
+    +int aplikasi_id
+    +string modul
+    +string jenis
+}
+class AplikasiDocument {
+    +int id
+    +int aplikasi_id
+    +string document_type
+    +string storage_path
+    +string original_filename
+    +int version
+    +string status
+    +int? uploaded_by
+}
+class AplikasiChecklist {
+    +int id
+    +int aplikasi_id
+    +string category
+    +string title
+    +string item_status
+    +string? notes
+    +int sort_order
+    +int? created_by
+    +int? updated_by
+}
+class AplikasiStatusHistory {
+    +int id
+    +int aplikasi_id
+    +string status_sebelumnya
+    +string status_baru
+    +string aksi
+    +string? catatan
+    +int changed_by
+}
+class AplikasiNote {
+    +int id
+    +int aplikasi_id
+    +string note_type
+    +string body
+    +bool is_checked
+    +int? checked_by
+    +datetime? checked_at
+    +int? created_by
+}
+class AppNotification {
+    +int id
+    +int user_id
+    +int aplikasi_id
+    +string type
+    +string title
+    +string body
+    +bool is_read
+}
+class Rfc {
+    +int id
+    +int aplikasi_id
+    +string tipe_rfc
+    +string deskripsi
+    +string pelaksana
+    +string status_tindaklanjut
+    +int? created_by
+    +int? updated_by
+}
+
+' -------------------------------------------------
+' Relasi utama (Aplikasi sebagai pusat)
+' -------------------------------------------------
+User "1" --> "0..*" Aplikasi : created_by / updated_by
+User "1" --> "0..*" AppNotification : user_id
+User "1" --> "0..*" AplikasiDocument : uploaded_by
+User "1" --> "0..*" AplikasiNote : created_by / checked_by
+User "1" --> "0..*" AplikasiChecklist : created_by / updated_by
+User "1" --> "0..*" AplikasiStatusHistory : changed_by
+User "1" --> "0..*" Rfc : created_by / updated_by
+
+Aplikasi "1" --> "0..*" AnalisaDesain : analisaDesains
+Aplikasi "1" --> "0..*" Proyek        : proyeks
+Aplikasi "1" --> "0..*" AplikasiDocument
+Aplikasi "1" --> "0..*" AplikasiChecklist
+Aplikasi "1" --> "0..*" AplikasiStatusHistory
+Aplikasi "1" --> "0..*" AplikasiNote
+Aplikasi "1" --> "0..*" Rfc
+Aplikasi "1" --> "0..*" AppNotification
+
+' -------------------------------------------------
+' Relasi konfigurasi (di bawah kanan)
+' -------------------------------------------------
+Aplikasi "1" --> "0..*" DatabaseConfig
+Aplikasi "1" --> "0..*" ObjectStorageConfig
+Aplikasi "1" --> "0..*" ApiGatewayConfig
+Aplikasi "1" --> "0..*" DevopsConfig
+Aplikasi "1" --> "0..*" FrontendConfig
+Aplikasi "1" --> "0..*" BackendConfig
+Aplikasi "1" --> "0..*" EnvironmentConfig
+
+' -------------------------------------------------
+' Catatan tambahan (tidak menjadi class)
+' -------------------------------------------------
+note right of Aplikasi
+  * **Studi Kelayakan**: dapat disimpan
+    - sebagai dokumen pada AplikasiDocument dengan
+      `document_type = 'studi_kelayakan'`, atau
+    - melalui atribut `doc_studi_kelayakan_path`.
+  * **UAT**, **Uji Keamanan**, **Deployment**, dan
+    **Pengembangan Aplikasi** direpresentasikan melalui
+    atribut status, dokumen, checklist, atau catatan
+    pada kelas yang ada.
+end note
+
+@enduml

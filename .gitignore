@@ -1,0 +1,46 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+backend/public/build/
+backend/public/hot
+
+# Runtime/cache/log output
+*.log
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/.phpunit.cache/
+backend/.phpunit.result.cache
+
+# Local database files / machine state
+smpa_db/
+*.ibd
+*.opt
+
+# Large reference books (not needed in repo)
+docs/references/*.pdf
+
+# UI backups
+docs/ui-backups/
+
+# Local archives and generated exports
+*.sql
+*.sqlite
+*.sqlite3

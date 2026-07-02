@@ -1,0 +1,94 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333333
+skinparam sequenceLifeLineBorderColor #888888
+skinparam sequenceActivationBorderColor #555555
+skinparam sequenceActivationBackgroundColor #E8F0FE
+skinparam sequenceDividerBackgroundColor #F5F5F5
+skinparam noteBorderColor #CCCCCC
+skinparam noteBackgroundColor #FFFDE7
+skinparam sequenceGroupBorderColor #888888
+skinparam sequenceGroupBackgroundColor #F9F9F9
+
+title Sequence Diagram Pengajuan Aplikasi Baru
+
+actor "Unit Kerja" as UK
+participant "AplikasiFormModal" as FE
+participant "http.js" as HTTP
+participant "Middleware" as MW
+participant "StoreAplikasiRequest" as VAL
+participant "AplikasiController" as CTRL
+participant "Aplikasi" as MDL
+database "Database" as DB
+
+== Membuka Form Pengajuan ==
+
+UK -> FE : Menekan tombol "Ajukan Aplikasi"
+activate FE
+FE --> UK : Menampilkan form pengajuan
+
+== Mengisi dan Mengirim Pengajuan ==
+
+UK -> FE : Mengisi form dan menekan "Ajukan"
+FE -> FE : Validasi data pada sisi antarmuka
+
+alt Validasi antarmuka gagal
+    FE --> UK : Menampilkan pesan kesalahan
+else Validasi antarmuka berhasil
+    FE -> FE : Menyusun data pengajuan
+    FE -> HTTP : Mengirim data pengajuan aplikasi
+    activate HTTP
+    HTTP -> HTTP : Menambahkan autentikasi permintaan
+    HTTP -> MW : Meneruskan permintaan ke server
+    activate MW
+
+    alt Autentikasi atau otorisasi gagal
+        MW --> HTTP : Mengembalikan respons gagal
+        HTTP --> FE : Meneruskan respons gagal
+        FE --> UK : Menampilkan pesan kesalahan akses
+    else Autentikasi dan otorisasi berhasil
+        MW -> VAL : Meneruskan permintaan
+        deactivate MW
+        activate VAL
+        VAL -> VAL : Validasi data pada sisi server
+
+        alt Validasi server gagal
+            VAL --> HTTP : Mengembalikan detail kesalahan validasi
+            deactivate VAL
+            HTTP --> FE : Meneruskan respons kesalahan
+            FE --> UK : Menampilkan pesan kesalahan validasi
+        else Validasi server berhasil
+            VAL -> CTRL : Meneruskan data tervalidasi
+            deactivate VAL
+            activate CTRL
+            CTRL -> CTRL : Memproses penyimpanan data
+            CTRL -> CTRL : Menetapkan status awal "diajukan"
+            CTRL -> MDL : Menyimpan data aplikasi
+            activate MDL
+            MDL -> MDL : Menetapkan data pembuat
+            MDL -> DB : Menyimpan ke basis data
+            activate DB
+            DB --> MDL : Data berhasil disimpan
+            deactivate DB
+            MDL --> CTRL : Mengembalikan data aplikasi
+            deactivate MDL
+            CTRL --> HTTP : Mengembalikan respons berhasil
+            deactivate CTRL
+            HTTP --> FE : Meneruskan respons berhasil
+            deactivate HTTP
+            FE --> UK : Menampilkan notifikasi\n"Pengajuan aplikasi berhasil dikirim"
+            FE -> FE : Menutup form pengajuan
+            deactivate FE
+
+            note right of UK
+              Daftar aplikasi
+              dimuat ulang.
+            end note
+        end
+    end
+end
+
+@enduml

@@ -8,198 +8,79 @@ use PHPUnit\Framework\TestCase;
 class UserTest extends TestCase
 {
     /**
-     * ID 4.1: Method isAdmin() pada class User dengan role admin
-     * Input: role = 'admin'
-     * Expected Output: true
+     * isAdminSistem() returns true for admin sistem role.
      */
-    public function test_is_admin_returns_true_for_admin_role()
+    public function test_is_admin_sistem_returns_true_for_matching_role()
     {
         $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertTrue($user->isAdmin());
+        $user->role = 'admin_sistem';
+
+        $this->assertTrue($user->isAdminSistem());
+    }
+
+    /**
+     * isPengelolaAplikasi() returns true for pengelola aplikasi role.
+     */
+    public function test_is_pengelola_aplikasi_returns_true_for_matching_role()
+    {
+        $user = new User();
+        $user->role = 'pengelola_aplikasi';
+
+        $this->assertTrue($user->isPengelolaAplikasi());
+    }
+
+    /**
+     * isAnalisDesain() returns true for analis desain role.
+     */
+    public function test_is_analis_desain_returns_true_for_matching_role()
+    {
+        $user = new User();
+        $user->role = 'analis_desain';
+
+        $this->assertTrue($user->isAnalisDesain());
+    }
+
+    /**
+     * isTimImplementasiAplikasi() returns true for implementation team role.
+     */
+    public function test_is_tim_implementasi_aplikasi_returns_true_for_matching_role()
+    {
+        $user = new User();
+        $user->role = 'tim_implementasi_aplikasi';
+
+        $this->assertTrue($user->isTimImplementasiAplikasi());
+    }
+
+    /**
+     * isTimImplementasiAplikasi() returns false for non-implementation role.
+     */
+    public function test_is_tim_implementasi_aplikasi_returns_false_for_non_implementation_role()
+    {
+        $user = new User();
+        $user->role = 'pengelola_aplikasi';
+
+        $this->assertFalse($user->isTimImplementasiAplikasi());
     }
     
     /**
-     * ID 4.2: Method isAdmin() pada class User dengan role bukan admin
-     * Input: role = 'frontend'
-     * Expected Output: false
+     * isDevops() returns true for devops developer role.
      */
-    public function test_is_admin_returns_false_for_non_admin_role()
+    public function test_is_devops_returns_true_for_devops_developer_role()
     {
         $user = new User();
-        $user->role = 'frontend';
-        
-        $this->assertFalse($user->isAdmin());
-    }
-    
-    /**
-     * ID 5.1: Method isAdmin1() pada class User dengan role admin
-     * Input: role = 'admin'
-     * Expected Output: true
-     */
-    public function test_is_admin1_returns_true_for_admin_role()
-    {
-        $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertTrue($user->isAdmin1());
-    }
-    
-    /**
-     * ID 5.2: Method isAdmin1() pada class User dengan role admin1
-     * Input: role = 'admin1'
-     * Expected Output: true
-     */
-    public function test_is_admin1_returns_true_for_admin1_role()
-    {
-        $user = new User();
-        $user->role = 'admin1';
-        
-        $this->assertTrue($user->isAdmin1());
-    }
-    
-    /**
-     * ID 5.3: Method isAdmin1() pada class User dengan role bukan admin atau admin1
-     * Input: role = 'frontend'
-     * Expected Output: false
-     */
-    public function test_is_admin1_returns_false_for_other_roles()
-    {
-        $user = new User();
-        $user->role = 'frontend';
-        
-        $this->assertFalse($user->isAdmin1());
-    }
-    
-    /**
-     * ID 6.1: Method isAdmin2() pada class User dengan role admin2
-     * Input: role = 'admin2'
-     * Expected Output: true
-     */
-    public function test_is_admin2_returns_true_for_admin2_role()
-    {
-        $user = new User();
-        $user->role = 'admin2';
-        
-        $this->assertTrue($user->isAdmin2());
-    }
-    
-    /**
-     * ID 6.2: Method isAdmin2() pada class User dengan role bukan admin2
-     * Input: role = 'admin'
-     * Expected Output: false
-     */
-    public function test_is_admin2_returns_false_for_non_admin2_role()
-    {
-        $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertFalse($user->isAdmin2());
-    }
-    
-    /**
-     * ID 7.1: Method isUser() pada class User dengan role user
-     * Input: role = 'user'
-     * Expected Output: true
-     */
-    public function test_is_user_returns_true_for_user_role()
-    {
-        $user = new User();
-        $user->role = 'user';
-        
-        $this->assertTrue($user->isUser());
-    }
-    
-    /**
-     * ID 7.2: Method isUser() pada class User dengan role bukan user
-     * Input: role = 'admin'
-     * Expected Output: false
-     */
-    public function test_is_user_returns_false_for_non_user_role()
-    {
-        $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertFalse($user->isUser());
-    }
-    
-    /**
-     * ID 8.1: Method isFrontend() pada class User dengan role frontend
-     * Input: role = 'frontend'
-     * Expected Output: true
-     */
-    public function test_is_frontend_returns_true_for_frontend_role()
-    {
-        $user = new User();
-        $user->role = 'frontend';
-        
-        $this->assertTrue($user->isFrontend());
-    }
-    
-    /**
-     * ID 8.2: Method isFrontend() pada class User dengan role bukan frontend
-     * Input: role = 'admin'
-     * Expected Output: false
-     */
-    public function test_is_frontend_returns_false_for_non_frontend_role()
-    {
-        $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertFalse($user->isFrontend());
-    }
-    
-    /**
-     * ID 9.1: Method isBackend() pada class User dengan role backend
-     * Input: role = 'backend'
-     * Expected Output: true
-     */
-    public function test_is_backend_returns_true_for_backend_role()
-    {
-        $user = new User();
-        $user->role = 'backend';
-        
-        $this->assertTrue($user->isBackend());
-    }
-    
-    /**
-     * ID 9.2: Method isBackend() pada class User dengan role bukan backend
-     * Input: role = 'admin'
-     * Expected Output: false
-     */
-    public function test_is_backend_returns_false_for_non_backend_role()
-    {
-        $user = new User();
-        $user->role = 'admin';
-        
-        $this->assertFalse($user->isBackend());
-    }
-    
-    /**
-     * ID 10.1: Method isDevops() pada class User dengan role devops
-     * Input: role = 'devops'
-     * Expected Output: true
-     */
-    public function test_is_devops_returns_true_for_devops_role()
-    {
-        $user = new User();
-        $user->role = 'devops';
+        $user->role = 'devops_developer';
         
         $this->assertTrue($user->isDevops());
     }
     
     /**
-     * ID 10.2: Method isDevops() pada class User dengan role bukan devops
-     * Input: role = 'admin'
-     * Expected Output: false
+     * isDevops() returns false for non-devops role.
      */
-    public function test_is_devops_returns_false_for_non_devops_role()
+    public function test_is_devops_returns_false_for_non_devops_developer_role()
     {
         $user = new User();
-        $user->role = 'admin';
+        $user->role = 'pengelola_aplikasi';
         
         $this->assertFalse($user->isDevops());
     }
 }
-
