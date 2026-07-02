@@ -30,3 +30,4 @@ Aplikasi web fullstack untuk mengelola siklus hidup pengembangan aplikasi di lin
 ## SonarCloud Analysis Trigger
 
 This commit is used to trigger second static analysis scan for SIMPA system.
+Triggering the *real* second scan to compute Quality Gate.
