@@ -116,6 +116,7 @@ if [ "${RUN_SEED}" = "true" ]; then
     php artisan db:seed --force
 fi
 
+mkdir -p resources/views
 php artisan storage:link || true
 php artisan optimize:clear
 php artisan config:cache
