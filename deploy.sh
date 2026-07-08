@@ -79,20 +79,36 @@ cd "${APP_DIR}/backend"
 
 if [ ! -f .env ]; then
     cp .env.example .env
-    sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/g' .env
-    sed -i 's/^# DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/g' .env
-    sed -i 's/^# DB_PORT=3306/DB_PORT=3306/g' .env
-    sed -i "s/^# DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE}/g" .env
-    sed -i "s/^# DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME}/g" .env
-    sed -i "s/^# DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" .env
-    sed -i "s|^APP_URL=.*|APP_URL=https://${DOMAIN}|g" .env
+fi
+
+set_env_value() {
+    local key="$1"
+    local value="$2"
+
+    if grep -qE "^#?${key}=" .env; then
+        sed -i "s|^#\\?${key}=.*|${key}=${value}|g" .env
+    else
+        printf "\n%s=%s\n" "${key}" "${value}" >> .env
+    fi
+}
+
+set_env_value "APP_NAME" "\"Sistem Informasi Manajemen Pengembangan Aplikasi\""
+set_env_value "APP_ENV" "production"
+set_env_value "APP_DEBUG" "false"
+set_env_value "APP_URL" "https://${DOMAIN}"
+set_env_value "DB_CONNECTION" "mysql"
+set_env_value "DB_HOST" "127.0.0.1"
+set_env_value "DB_PORT" "3306"
+set_env_value "DB_DATABASE" "${DB_DATABASE}"
+set_env_value "DB_USERNAME" "${DB_USERNAME}"
+set_env_value "DB_PASSWORD" "${DB_PASSWORD}"
+
+if ! grep -q '^APP_KEY=base64:' .env; then
+    GENERATED_APP_KEY="$(php -r "echo 'base64:'.base64_encode(random_bytes(32));")"
+    set_env_value "APP_KEY" "${GENERATED_APP_KEY}"
 fi
 
 composer install --optimize-autoloader --no-dev
-
-if ! grep -q '^APP_KEY=base64:' .env; then
-    php artisan key:generate --force
-fi
 
 php artisan migrate --force
 
