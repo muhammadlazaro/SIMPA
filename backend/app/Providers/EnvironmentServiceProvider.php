@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Validator;
 
 class EnvironmentServiceProvider extends ServiceProvider
 {
@@ -20,72 +19,64 @@ class EnvironmentServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Validate critical environment variables on app boot
         $this->validateEnvironment();
     }
 
     /**
-     * Validate required environment variables
+     * Validate required environment-derived configuration values.
      */
     protected function validateEnvironment(): void
     {
         $required = [
-            'APP_NAME',
-            'APP_ENV',
-            'APP_DEBUG',
-            'APP_URL',
-            'DB_CONNECTION',
+            'APP_NAME' => config('app.name'),
+            'APP_ENV' => config('app.env'),
+            'APP_DEBUG' => config('app.debug'),
+            'APP_URL' => config('app.url'),
+            'DB_CONNECTION' => config('database.default'),
         ];
-        
-        // Only require APP_KEY if it's not being generated
-        if (!str_contains($_SERVER['REQUEST_URI'] ?? '', 'key:generate')) {
-            $required[] = 'APP_KEY';
+
+        if (! str_contains($_SERVER['REQUEST_URI'] ?? '', 'key:generate')) {
+            $required['APP_KEY'] = config('app.key');
         }
 
-        // For MySQL/PostgreSQL, require additional DB settings
-        $dbConnection = env('DB_CONNECTION');
+        $dbConnection = config('database.default');
         if ($dbConnection === 'mysql' || $dbConnection === 'pgsql') {
-            $required = array_merge($required, [
-                'DB_HOST',
-                'DB_PORT',
-                'DB_DATABASE',
-                'DB_USERNAME',
-            ]);
+            $required['DB_HOST'] = config("database.connections.{$dbConnection}.host");
+            $required['DB_PORT'] = config("database.connections.{$dbConnection}.port");
+            $required['DB_DATABASE'] = config("database.connections.{$dbConnection}.database");
+            $required['DB_USERNAME'] = config("database.connections.{$dbConnection}.username");
         }
 
         $missing = [];
-        foreach ($required as $var) {
-            $value = env($var);
+        foreach ($required as $name => $value) {
             if ($value === null || $value === '') {
-                $missing[] = $var;
+                $missing[] = $name;
             }
         }
 
-        if (!empty($missing)) {
+        if (! empty($missing)) {
             throw new \RuntimeException(
                 'Missing required environment variables: ' . implode(', ', $missing) .
                 '. Please check your .env file.'
             );
         }
 
-        // Validate APP_KEY is set and properly formatted (skip during key generation)
-        if (!empty(env('APP_KEY')) && strlen(env('APP_KEY')) < 32) {
+        $appKey = (string) config('app.key');
+        if ($appKey !== '' && strlen($appKey) < 32) {
             throw new \RuntimeException(
                 'APP_KEY must be at least 32 characters. Run: php artisan key:generate'
             );
         }
 
-        // Validate APP_ENV values (allow 'testing' for PHPUnit tests)
         $validEnvironments = ['local', 'development', 'staging', 'production', 'testing'];
-        if (!in_array(env('APP_ENV'), $validEnvironments)) {
+        if (! in_array(config('app.env'), $validEnvironments, true)) {
             throw new \RuntimeException(
                 'APP_ENV must be one of: ' . implode(', ', $validEnvironments)
             );
         }
 
-        // Security check: APP_DEBUG should be false in production
-        if (env('APP_ENV') === 'production' && env('APP_DEBUG') === true) {
-            \Log::warning('⚠️  APP_DEBUG is enabled in production! This is a security risk.');
+        if (config('app.env') === 'production' && config('app.debug') === true) {
+            \Log::warning('APP_DEBUG is enabled in production. This is a security risk.');
         }
     }
 }
