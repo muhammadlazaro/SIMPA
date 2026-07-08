@@ -1956,7 +1956,7 @@ const userContextMessage = computed(() => {
               <span v-if="item.notes" class="checklist-item-notes">{{ item.notes }}</span>
             </div>
             <div class="checklist-item-action">
-              <label v-if="isDevOpsRole" class="checklist-toggle-compact">
+              <label class="checklist-toggle-compact">
                 <input
                   type="checkbox"
                   :checked="item.item_status === 'done'"
@@ -1965,18 +1965,6 @@ const userContextMessage = computed(() => {
                 />
                 <span>{{ item.item_status === 'done' ? 'Selesai' : 'Belum selesai' }}</span>
               </label>
-              <select
-                v-else
-                :value="item.item_status"
-                :disabled="updatingImplementationChecklistId === item.id"
-                class="checklist-status-select"
-                :class="`select--${item.item_status}`"
-                @change="updateImplementationChecklistItem(item, { item_status: $event.target.value })"
-              >
-                <option value="pending">Pending</option>
-                <option value="in_progress">Diproses</option>
-                <option value="done">Selesai</option>
-              </select>
             </div>
           </div>
         </div>
