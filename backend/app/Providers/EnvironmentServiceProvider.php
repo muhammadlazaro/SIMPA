@@ -55,7 +55,8 @@ class EnvironmentServiceProvider extends ServiceProvider
 
         $missing = [];
         foreach ($required as $var) {
-            if (empty(env($var))) {
+            $value = env($var);
+            if ($value === null || $value === '') {
                 $missing[] = $var;
             }
         }
@@ -88,4 +89,3 @@ class EnvironmentServiceProvider extends ServiceProvider
         }
     }
 }
-
