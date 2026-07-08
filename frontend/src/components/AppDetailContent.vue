@@ -419,7 +419,7 @@ const canDeactivateApp = computed(() => isPengelolaRole.value && app.value?.stat
 const shouldLoadDocuments = computed(() => isDocumentPanelMode.value)
 const showTechnicalSections = computed(() => !props.unitKerjaMode && !props.securityMode && !props.analystMode)
 const showTabMenu = computed(() => true)
-const isImplementationContext = computed(() => isImplementationRole.value || props.implementationMode)
+const isImplementationContext = computed(() => isImplementationRole.value || isDevOpsRole.value || props.implementationMode)
 const showFeasibilityChecklistPanel = computed(() =>
   isNonUnitKerjaRole.value &&
   !isImplementationContext.value &&
@@ -431,8 +431,14 @@ const showImplementationChecklistPanel = computed(() =>
 )
 
 function canLoadImplementationChecklistNow() {
+  const status = app.value?.status || ''
+
+  if (isDevOpsRole.value) {
+    return ['siap_deploy', 'deployed_staging', 'deployed_production'].includes(status)
+  }
+
   if (!(isImplementationRole.value || props.implementationMode)) return false
-  return ['pengembangan', 'perbaikan_uat', 'perbaikan_keamanan'].includes(app.value?.status || '')
+  return ['pengembangan', 'perbaikan_uat', 'perbaikan_keamanan'].includes(status)
 }
 
 // Flat tabs for all roles
@@ -506,6 +512,16 @@ const implementationRoleLabel = computed(() => {
   return 'Implementasi'
 })
 
+const implementationChecklistTitle = computed(() =>
+  isDevOpsRole.value ? 'Checklist DevOps' : 'Checklist Implementasi'
+)
+
+const implementationChecklistEmptyText = computed(() =>
+  isDevOpsRole.value
+    ? 'Tambahkan item pertama untuk melacak kesiapan deployment.'
+    : 'Tambahkan item pertama untuk melacak progres implementasi.'
+)
+
 onMounted(async () => {
   await loadData()
 })
@@ -532,7 +548,7 @@ async function loadData() {
     if (shouldLoadDocuments.value) {
       jobs.push(loadDocuments())
     }
-    // Load checklist implementation hanya untuk Tim Implementasi
+    // Load checklist progress sesuai role: Implementasi atau DevOps.
     if (canLoadImplementationChecklistNow()) {
       jobs.push(loadImplementationChecklist())
     }
@@ -1846,7 +1862,7 @@ const userContextMessage = computed(() => {
           <div class="checklist-header-top">
             <h4 class="checklist-title">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-              Checklist Implementasi
+              {{ implementationChecklistTitle }}
             </h4>
             <div class="checklist-stat-chips">
               <span class="stat-chip stat-chip--done">
@@ -1917,7 +1933,7 @@ const userContextMessage = computed(() => {
         <div v-else-if="implementationChecklistItems.length === 0" class="empty-state compact">
           <Icons name="inbox" :size="40" />
           <p class="empty-title">Belum ada item progress</p>
-          <p class="empty-desc">Tambahkan item pertama untuk melacak progres implementasi.</p>
+          <p class="empty-desc">{{ implementationChecklistEmptyText }}</p>
           <button type="button" class="btn btn-secondary" @click="focusImplementationTitle">Tambah item pertama</button>
         </div>
         <div v-else class="checklist-items-list">
@@ -1940,7 +1956,17 @@ const userContextMessage = computed(() => {
               <span v-if="item.notes" class="checklist-item-notes">{{ item.notes }}</span>
             </div>
             <div class="checklist-item-action">
+              <label v-if="isDevOpsRole" class="checklist-toggle-compact">
+                <input
+                  type="checkbox"
+                  :checked="item.item_status === 'done'"
+                  :disabled="updatingImplementationChecklistId === item.id"
+                  @change="updateImplementationChecklistItem(item, { item_status: $event.target.checked ? 'done' : 'pending' })"
+                />
+                <span>{{ item.item_status === 'done' ? 'Selesai' : 'Belum selesai' }}</span>
+              </label>
               <select
+                v-else
                 :value="item.item_status"
                 :disabled="updatingImplementationChecklistId === item.id"
                 class="checklist-status-select"

@@ -414,7 +414,10 @@ function formatDate(value) {
 
         <div class="rfc-stepper" aria-label="Tahap pengajuan RFC">
           <div class="rfc-step" :class="{ active: formStep === 1, done: formStep > 1 }">
-            <span>1</span>
+            <span>
+              <Icons v-if="formStep > 1" name="check" :size="12" />
+              <template v-else>1</template>
+            </span>
             <strong>Data RFC</strong>
           </div>
           <div class="rfc-step-line" :class="{ active: formStep > 1 }"></div>
@@ -459,22 +462,40 @@ function formatDate(value) {
 
           <template v-else>
             <div class="rfc-upload-section">
-              <div class="rfc-upload-copy">
-                <h4>Unggah Formulir RFC</h4>
-                <p>Unggah formulir RFC resmi dalam format PDF, DOC, atau DOCX. Dokumen ini wajib agar pengajuan dapat diproses.</p>
+              <div class="rfc-upload-header">
+                <div class="rfc-upload-icon">
+                  <Icons name="file-text" :size="24" />
+                </div>
+                <div class="rfc-upload-copy">
+                  <h4>Unggah Formulir RFC</h4>
+                  <p>Unggah formulir RFC resmi. Dokumen ini wajib agar pengajuan dapat diproses.</p>
+                </div>
               </div>
+
+              <div class="rfc-template-row">
+                <Icons name="download" :size="14" />
+                <a
+                  href="/templates/Formulir-RFC.xlsx"
+                  class="rfc-template-link"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Buka template formulir RFC
+                </a>
+              </div>
+
               <div class="rfc-upload-area" :class="{ 'has-file': !!rfcFile }">
                 <template v-if="!rfcFile">
                   <label class="rfc-upload-label" for="unit-rfc-formulir-input">
                     <Icons name="upload" :size="28" />
                     <strong>Pilih Formulir RFC</strong>
-                    <span>PDF, DOC, atau DOCX maksimal 10 MB</span>
+                    <span>PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB</span>
                   </label>
                   <input
                     id="unit-rfc-formulir-input"
                     ref="rfcFileInput"
                     type="file"
-                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     @change="onRfcFileChange"
                   />
                 </template>
@@ -799,18 +820,6 @@ function formatDate(value) {
   font-weight: 800;
 }
 
-.optional-mark {
-  color: var(--notion-text-secondary);
-  font-weight: 500;
-}
-
-.form-hint {
-  display: block;
-  margin-top: 6px;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-}
-
 .rfc-modal-actions {
   display: flex;
   justify-content: stretch;
@@ -829,38 +838,83 @@ function formatDate(value) {
   gap: 14px;
 }
 
+.rfc-upload-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.rfc-upload-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--notion-blue-bg, #eff6ff);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--notion-blue, #2563eb);
+}
+
 .rfc-upload-copy h4 {
   margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--notion-text);
 }
 
 .rfc-upload-copy p {
   margin: 0;
   color: var(--notion-text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.rfc-template-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--notion-text-secondary);
+}
+
+.rfc-template-link {
+  font-size: 13px;
+  color: var(--notion-blue);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.rfc-template-link:hover {
+  text-decoration: underline;
 }
 
 .rfc-upload-area {
-  border: 1px dashed #b9c6dc;
-  border-radius: 12px;
-  background: #f8fafc;
-  min-height: 160px;
+  border: 2px dashed var(--notion-border);
+  border-radius: 10px;
+  background: var(--notion-bg);
+  min-height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.rfc-upload-area:hover {
+  border-color: var(--notion-blue);
+  background: var(--notion-blue-bg, #eff6ff);
 }
 
 .rfc-upload-area.has-file {
   border-style: solid;
-  background: #eef6ff;
+  border-color: #10b981;
+  background: #f0fdf4;
 }
 
 .rfc-upload-label {
   width: 100%;
-  min-height: 160px;
+  min-height: auto;
+  padding: 32px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;

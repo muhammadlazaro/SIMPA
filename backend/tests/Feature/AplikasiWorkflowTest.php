@@ -110,6 +110,29 @@ class AplikasiWorkflowTest extends TestCase
             ->assertJsonPath('data.checklist.category', 'implementation_progress');
     }
 
+    public function test_devops_can_manage_devops_checklist_on_deployment_stage(): void
+    {
+        $devops = User::factory()->create(['role' => 'devops_developer']);
+        $token = $devops->createToken('t')->plainTextToken;
+        $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_SIAP_DEPLOY]);
+
+        $index = $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->getJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists");
+
+        $index->assertStatus(200)
+            ->assertJsonPath('data.category', 'devops_progress')
+            ->assertJsonCount(3, 'data.checklists');
+
+        $checklistId = $index->json('data.checklists.0.id');
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->patchJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists/{$checklistId}", [
+                'item_status' => 'done',
+            ])->assertStatus(200)
+            ->assertJsonPath('data.checklist.item_status', 'done')
+            ->assertJsonPath('data.checklist.category', 'devops_progress');
+    }
+
     public function test_implementation_checklist_is_isolated_by_role_category(): void
     {
         $implementer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);

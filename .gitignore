@@ -17,6 +17,7 @@ vendor/
 # Build output
 frontend/dist/
 frontend/dist-ssr/
+frontend/.vite/
 backend/public/build/
 backend/public/hot
 

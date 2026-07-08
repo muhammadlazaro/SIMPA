@@ -22,7 +22,7 @@ class UpdateRfcRequest extends FormRequest
             'formulir_rfc' => [
                 'nullable',
                 'file',
-                'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'max:10240',
             ],
             'pelaksana' => ['sometimes','required', Rule::in(Rfc::PELAKSANA_VALUES)],
@@ -30,5 +30,4 @@ class UpdateRfcRequest extends FormRequest
         ];
     }
 }
-
 
