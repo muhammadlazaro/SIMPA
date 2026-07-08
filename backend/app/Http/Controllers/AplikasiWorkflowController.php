@@ -11,6 +11,7 @@ use App\Models\Aplikasi;
 use App\Models\AplikasiChecklist;
 use App\Models\AplikasiNote;
 use App\Models\User;
+use App\Support\AplikasiAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Traits\HandlesAplikasiTransitions;
@@ -377,7 +378,7 @@ class AplikasiWorkflowController extends Controller
         }
 
         if ($user->isUnitKerja()) {
-            return (int) $aplikasi->getAttribute('created_by') === (int) $user->getKey();
+            return AplikasiAccess::canUnitKerjaAccess($user, $aplikasi);
         }
 
         return $user->isPengelolaAplikasi()

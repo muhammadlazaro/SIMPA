@@ -275,6 +275,29 @@ class Aplikasi extends Model
                 }
             }
 
+            if ($newStatus === self::STATUS_UAT) {
+                $unitKerjaEntry = [
+                    'type'  => 'action_required',
+                    'title' => 'Aplikasi Siap UAT',
+                    'body'  => 'Aplikasi "%s" siap diuji. Silakan unduh format UAT, lakukan pengujian, dan unggah dokumen hasil UAT.',
+                ];
+
+                $creator = $model->creator()->select('id', 'role')->first();
+                $usersToNotify = $creator?->isUnitKerja()
+                    ? collect([$creator])
+                    : \App\Models\User::where('role', 'unit_kerja')->get();
+
+                foreach ($usersToNotify as $unitKerja) {
+                    AppNotification::create([
+                        'user_id'     => $unitKerja->getKey(),
+                        'aplikasi_id' => $model->getKey(),
+                        'type'        => $unitKerjaEntry['type'],
+                        'title'       => $unitKerjaEntry['title'],
+                        'body'        => sprintf($unitKerjaEntry['body'], $appName),
+                    ]);
+                }
+            }
+
             // ─── 3. Notifikasi khusus untuk Unit Kerja (pemilik aplikasi) ─────────────
             // Hanya untuk status yang berdampak langsung: keputusan penting dan final.
             if ($model->created_by) {

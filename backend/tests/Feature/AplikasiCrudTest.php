@@ -346,6 +346,51 @@ class AplikasiCrudTest extends TestCase
         $response->assertJsonCount(1, 'data');
     }
 
+    public function test_unit_kerja_can_see_pengelola_created_uat_application_for_review(): void
+    {
+        $uatApp = Aplikasi::factory()->create([
+            'created_by' => $this->pengelolaUser->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
+        $hiddenDevelopmentApp = Aplikasi::factory()->create([
+            'created_by' => $this->pengelolaUser->id,
+            'status' => Aplikasi::STATUS_PENGEMBANGAN,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+            ->getJson('/api/aplikasi');
+
+        $response->assertStatus(200);
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertContains($uatApp->id, $ids);
+        $this->assertNotContains($hiddenDevelopmentApp->id, $ids);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+            ->getJson("/api/aplikasi/{$uatApp->id}")
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $uatApp->id);
+    }
+
+    public function test_unit_kerja_cannot_see_other_unit_uat_application(): void
+    {
+        $otherUnit = User::factory()->create(['role' => 'unit_kerja']);
+        $otherUnitApp = Aplikasi::factory()->create([
+            'created_by' => $otherUnit->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+            ->getJson('/api/aplikasi');
+
+        $response->assertStatus(200);
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertNotContains($otherUnitApp->id, $ids);
+
+        $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+            ->getJson("/api/aplikasi/{$otherUnitApp->id}")
+            ->assertStatus(404);
+    }
+
     /**
      * Test unit kerja cannot open detail aplikasi from other users.
      */

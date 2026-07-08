@@ -62,6 +62,31 @@ class AplikasiDocumentTest extends TestCase
         $upload->assertStatus(201);
     }
 
+    public function test_unit_kerja_can_upload_uat_document_for_pengelola_created_uat_app(): void
+    {
+        Storage::fake('public');
+
+        $unitKerja = User::factory()->create(['role' => 'unit_kerja']);
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $token = $unitKerja->createToken('t')->plainTextToken;
+        $app = Aplikasi::factory()->create([
+            'created_by' => $pengelola->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->getJson("/api/aplikasi/{$app->id}/documents")
+            ->assertStatus(200);
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->post("/api/aplikasi/{$app->id}/documents", [
+                'document_type' => 'uat',
+                'file' => UploadedFile::fake()->create('uat.pdf', 100, self::PDF_MIME_TYPE),
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.document.document_type', 'uat');
+    }
+
     public function test_unit_kerja_cannot_upload_laporan_analisa_desain(): void
     {
         Storage::fake('public');
@@ -83,7 +108,25 @@ class AplikasiDocumentTest extends TestCase
         $u = User::factory()->create(['role' => 'unit_kerja']);
         $token = $u->createToken('t')->plainTextToken;
         $other = User::factory()->create(['role' => 'pengelola_aplikasi']);
-        $app = Aplikasi::factory()->create(['created_by' => $other->id]);
+        $app = Aplikasi::factory()->create([
+            'created_by' => $other->id,
+            'status' => Aplikasi::STATUS_PENGEMBANGAN,
+        ]);
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->getJson("/api/aplikasi/{$app->id}/documents")
+            ->assertStatus(403);
+    }
+
+    public function test_unit_kerja_cannot_access_other_unit_uat_documents(): void
+    {
+        $unitKerja = User::factory()->create(['role' => 'unit_kerja']);
+        $otherUnit = User::factory()->create(['role' => 'unit_kerja']);
+        $token = $unitKerja->createToken('t')->plainTextToken;
+        $app = Aplikasi::factory()->create([
+            'created_by' => $otherUnit->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
 
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->getJson("/api/aplikasi/{$app->id}/documents")

@@ -14,14 +14,13 @@ final class AplikasiDocumentAccess
     public static function canView(User $user, Aplikasi $aplikasi): bool
     {
         $isImplementationRole = $user->isTimImplementasiAplikasi() || $user->isDevops();
-        $isUnitOwner = $user->isUnitKerja()
-            && (int) $aplikasi->getAttribute('created_by') === (int) $user->getKey();
+        $isUnitAccessor = AplikasiAccess::canUnitKerjaAccess($user, $aplikasi);
 
         return $user->isPengelolaAplikasi()
             || $isImplementationRole
             || $user->isAnalisDesain()
             || $user->isTimUjiKeamanan()
-            || $isUnitOwner;
+            || $isUnitAccessor;
     }
 
     public static function canUploadType(User $user, AplikasiJenisDokumen $type): bool

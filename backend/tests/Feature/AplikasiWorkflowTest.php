@@ -80,6 +80,22 @@ class AplikasiWorkflowTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_unit_kerja_can_view_workflow_for_pengelola_created_uat_application(): void
+    {
+        $unitKerja = User::factory()->create(['role' => 'unit_kerja']);
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $token = $unitKerja->createToken('t')->plainTextToken;
+        $aplikasi = Aplikasi::factory()->create([
+            'created_by' => $pengelola->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->getJson("/api/aplikasi/{$aplikasi->id}/workflow")
+            ->assertStatus(200)
+            ->assertJsonStructure(['success', 'message', 'data' => ['checklists', 'notes']]);
+    }
+
     public function test_tim_implementasi_can_manage_implementation_checklist(): void
     {
         $implementer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);
@@ -228,8 +244,13 @@ class AplikasiWorkflowTest extends TestCase
     public function test_siap_uat_requires_completed_implementation_checklist_and_documents(): void
     {
         $implementer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $unitKerja = User::factory()->create(['role' => 'unit_kerja']);
         $token = $implementer->createToken('t')->plainTextToken;
-        $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_PENGEMBANGAN]);
+        $aplikasi = Aplikasi::factory()->create([
+            'created_by' => $pengelola->id,
+            'status' => Aplikasi::STATUS_PENGEMBANGAN,
+        ]);
 
         AplikasiChecklist::query()->create([
             'aplikasi_id' => $aplikasi->id,
@@ -262,6 +283,13 @@ class AplikasiWorkflowTest extends TestCase
             ])
             ->assertStatus(200)
             ->assertJsonPath('data.status', Aplikasi::STATUS_UAT);
+
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $unitKerja->id,
+            'aplikasi_id' => $aplikasi->id,
+            'title' => 'Aplikasi Siap UAT',
+            'type' => 'action_required',
+        ]);
     }
 
     public function test_uat_approval_and_security_result_require_supporting_documents(): void

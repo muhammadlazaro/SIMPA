@@ -10,6 +10,7 @@ use App\Http\Helpers\QueryHelper;
 use App\Models\Aplikasi;
 use App\Models\Rfc;
 use App\Services\AutoGenerationService;
+use App\Support\AplikasiAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -33,9 +34,10 @@ class AplikasiController extends Controller
         // Eager load creator and updater to avoid N+1 queries
         $query->with(['creator:id,name', 'updater:id,name']);
 
-        // Unit kerja hanya boleh melihat aplikasi yang dia ajukan sendiri.
+        // Unit kerja melihat pengajuan miliknya sendiri, plus aplikasi UAT lama
+        // yang dibuat non-Unit Kerja dan perlu ditindaklanjuti oleh role Unit Kerja.
         if ($user && $user->isUnitKerja()) {
-            $query->where('created_by', $user->getKey());
+            AplikasiAccess::scopeVisibleToUnitKerja($query, $user);
         }
 
         if ($search = $request->get('q')) {
@@ -211,7 +213,7 @@ class AplikasiController extends Controller
 
         $user = $request->user();
         if ($user && $user->isUnitKerja()) {
-            $query->where('created_by', $user->getKey());
+            AplikasiAccess::scopeVisibleToUnitKerja($query, $user);
         }
 
         $item = $query->findOrFail($id);

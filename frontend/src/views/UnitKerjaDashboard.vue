@@ -180,10 +180,10 @@ function getNextActionText(status) {
               Dashboard
             </button>
             <span class="uk-bc-sep">/</span>
-            <span class="uk-bc-current">Pengajuan saya</span>
+            <span class="uk-bc-current">Pengajuan & UAT</span>
           </nav>
           <h2 class="uk-welcome-title">{{ greeting }}, {{ auth.user?.name?.split(' ')[0] || 'User' }}</h2>
-          <p class="uk-welcome-sub">Kelola dan pantau seluruh pengajuan aplikasi unit kerja Anda dari sini.</p>
+          <p class="uk-welcome-sub">Pantau pengajuan aplikasi dan tindak lanjuti UAT yang sudah siap diuji.</p>
         </div>
       </div>
 
@@ -191,7 +191,7 @@ function getNextActionText(status) {
       <div class="stats-grid">
         <div class="stat-card total">
           <div class="stat-header">
-            <span class="stat-label">Total Pengajuan</span>
+            <span class="stat-label">Total Item</span>
             <div class="stat-icon-wrap bg-blue">
               <Icons name="file" :size="18" />
             </div>
@@ -230,7 +230,7 @@ function getNextActionText(status) {
       <!-- Main table card -->
       <div class="content-section active">
         <div class="card uk-card">
-          <DataCardHead title="Pengajuan Anda">
+          <DataCardHead title="Pengajuan & Tindak Lanjut UAT">
             <template #actions>
               <div class="search-group">
                 <span class="search-icon">
@@ -258,13 +258,13 @@ function getNextActionText(status) {
 
           <div v-if="loading" class="loading-state">
             <div class="loading-spinner"></div>
-            <p>Memuat pengajuan...</p>
+            <p>Memuat data...</p>
           </div>
 
           <div v-else-if="apps.length === 0 && hasActiveSearch" class="global-empty">
             <p class="global-empty-title">Tidak ada hasil pencarian</p>
             <p class="global-empty-text">
-              Tidak ada pengajuan Anda yang cocok dengan kata kunci ini. Coba istilah lain atau kosongkan pencarian.
+              Tidak ada pengajuan atau UAT yang cocok dengan kata kunci ini. Coba istilah lain atau kosongkan pencarian.
             </p>
             <button type="button" class="btn btn-ghost" @click="clearSearch">
               Hapus pencarian
@@ -275,10 +275,10 @@ function getNextActionText(status) {
             <div class="global-empty-icon-wrapper">
               <Icons name="folder-plus" :size="48" class="global-empty-icon" />
             </div>
-            <h3 class="global-empty-title">Belum Ada Pengajuan</h3>
+            <h3 class="global-empty-title">Belum Ada Pengajuan atau UAT</h3>
             <p class="global-empty-text">
-              Anda belum pernah mengajukan aplikasi apapun. Mari mulai langkah pertama<br>
-              dengan mendaftarkan aplikasi Unit Kerja Anda.
+              Belum ada pengajuan aplikasi atau aplikasi yang perlu diuji UAT.
+              Mulai langkah pertama dengan mendaftarkan aplikasi Unit Kerja Anda.
             </p>
             <button class="btn btn-primary" @click="openAddModal">
               <Icons name="plus" :size="16" />
@@ -348,7 +348,7 @@ function getNextActionText(status) {
               <div class="pagination-info">
                 Menampilkan {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + 1 }} -
                 {{ Math.min(appsPagination.currentPage * appsPagination.perPage, appsPagination.total) }}
-                dari {{ appsPagination.total }} pengajuan
+                dari {{ appsPagination.total }} item
               </div>
               <div class="pagination-controls">
                 <button
