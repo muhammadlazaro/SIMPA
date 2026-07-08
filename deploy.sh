@@ -1,109 +1,181 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+APP_NAME="simpa"
+APP_DIR="/var/www/${APP_NAME}"
+REPO_URL="https://github.com/muhammadlazaro/SIMPA.git"
+BRANCH="${BRANCH:-master}"
+DOMAIN="${DOMAIN:-simpa.plutolab.my.id}"
+API_BASE_URL="${API_BASE_URL:-https://${DOMAIN}/api}"
+
+DB_DATABASE="${DB_DATABASE:-smpa_db}"
+DB_USERNAME="${DB_USERNAME:-simpa}"
+DB_PASSWORD="${DB_PASSWORD:-simpa_secret}"
+RUN_SEED="${RUN_SEED:-false}"
+
+PHP_VERSION="8.2"
+PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
+PHP_FPM_SOCKET="/var/run/php/php${PHP_VERSION}-fpm.sock"
 
 echo "=========================================="
-echo "🚀 Starting Deployment for SIMPA Project..."
+echo "Starting Deployment for SIMPA Project..."
+echo "Branch: ${BRANCH}"
+echo "App dir: ${APP_DIR}"
+echo "Domain: ${DOMAIN}"
 echo "=========================================="
 
-echo "1/6 Installing Dependencies (Nginx, PHP, MySQL, Node.js)..."
+echo "1/7 Installing system dependencies..."
 sudo apt update
-sudo apt install -y nginx git curl unzip software-properties-common
+sudo apt install -y nginx git curl unzip software-properties-common mysql-server
 sudo add-apt-repository ppa:ondrej/php -y || true
 sudo apt update
-sudo apt install -y php8.2-fpm php8.2-mysql php8.2-xml php8.2-mbstring php8.2-curl php8.2-zip php8.2-bcmath
-sudo apt install -y mysql-server
+sudo apt install -y \
+    "php${PHP_VERSION}-fpm" \
+    "php${PHP_VERSION}-mysql" \
+    "php${PHP_VERSION}-xml" \
+    "php${PHP_VERSION}-mbstring" \
+    "php${PHP_VERSION}-curl" \
+    "php${PHP_VERSION}-zip" \
+    "php${PHP_VERSION}-bcmath"
 
-if ! command -v composer &> /dev/null; then
+if ! command -v composer >/dev/null 2>&1; then
     echo "Installing Composer..."
     curl -sS https://getcomposer.org/installer | php
     sudo mv composer.phar /usr/local/bin/composer
 fi
 
-if ! command -v node &> /dev/null; then
+if ! command -v node >/dev/null 2>&1; then
     echo "Installing Node.js..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
 fi
 
-echo "2/6 Configuring MySQL Database..."
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS smpa_db;"
-sudo mysql -e "CREATE USER IF NOT EXISTS 'simpa'@'localhost' IDENTIFIED BY 'simpa_secret';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON smpa_db.* TO 'simpa'@'localhost';"
+echo "2/7 Ensuring MySQL database exists..."
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_DATABASE}\`;"
+sudo mysql -e "CREATE USER IF NOT EXISTS '${DB_USERNAME}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON \`${DB_DATABASE}\`.* TO '${DB_USERNAME}'@'localhost';"
 sudo mysql -e "FLUSH PRIVILEGES;"
 
-echo "3/6 Cloning Repository..."
-cd /var/www
-if [ -d "simpa" ]; then
-    sudo rm -rf simpa
-fi
-sudo git clone https://github.com/muhammadlazaro/SIMPA.git simpa
-sudo chown -R $USER:$USER /var/www/simpa
-cd simpa
+echo "3/7 Syncing repository..."
+sudo mkdir -p "$(dirname "${APP_DIR}")"
+sudo chown -R "$USER:$USER" "$(dirname "${APP_DIR}")"
 
-echo "4/6 Setting up Backend (Laravel)..."
-cd backend
-cp .env.example .env
-sed -i 's/DB_CONNECTION=sqlite/DB_CONNECTION=mysql/g' .env
-sed -i 's/# DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/g' .env
-sed -i 's/# DB_PORT=3306/DB_PORT=3306/g' .env
-sed -i 's/# DB_DATABASE=laravel/DB_DATABASE=smpa_db/g' .env
-sed -i 's/# DB_USERNAME=root/DB_USERNAME=simpa/g' .env
-sed -i 's/# DB_PASSWORD=/DB_PASSWORD=simpa_secret/g' .env
+if [ -d "${APP_DIR}/.git" ]; then
+    cd "${APP_DIR}"
+    git fetch origin "${BRANCH}"
+    git checkout "${BRANCH}"
+    git pull --ff-only origin "${BRANCH}"
+elif [ -d "${APP_DIR}" ] && [ "$(find "${APP_DIR}" -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]; then
+    echo "ERROR: ${APP_DIR} exists but is not a git repository."
+    echo "Move it away or convert it to a git checkout before deploying."
+    exit 1
+else
+    git clone --branch "${BRANCH}" "${REPO_URL}" "${APP_DIR}"
+    cd "${APP_DIR}"
+fi
+
+echo "4/7 Setting up backend..."
+cd "${APP_DIR}/backend"
+
+if [ ! -f .env ]; then
+    cp .env.example .env
+    sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=mysql/g' .env
+    sed -i 's/^# DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/g' .env
+    sed -i 's/^# DB_PORT=3306/DB_PORT=3306/g' .env
+    sed -i "s/^# DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE}/g" .env
+    sed -i "s/^# DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME}/g" .env
+    sed -i "s/^# DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" .env
+    sed -i "s|^APP_URL=.*|APP_URL=https://${DOMAIN}|g" .env
+fi
+
 composer install --optimize-autoloader --no-dev
-php artisan key:generate
-php artisan migrate --seed --force
-php artisan storage:link
+
+if ! grep -q '^APP_KEY=base64:' .env; then
+    php artisan key:generate --force
+fi
+
+php artisan migrate --force
+
+if [ "${RUN_SEED}" = "true" ]; then
+    php artisan db:seed --force
+fi
+
+php artisan storage:link || true
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
 sudo chown -R www-data:www-data storage bootstrap/cache
 sudo chmod -R 775 storage bootstrap/cache
-cd ..
 
-echo "5/6 Setting up Frontend (Vue.js)..."
-cd frontend
-cp .env.production.example .env.production
-sed -i 's|VITE_API_BASE_URL=.*|VITE_API_BASE_URL=https://simpa.plutolab.my.id/api|g' .env.production
-npm install
+echo "5/7 Building frontend..."
+cd "${APP_DIR}/frontend"
+cat > .env.production <<EOF
+VITE_API_BASE_URL=${API_BASE_URL}
+VITE_APP_NAME="Sistem Informasi Manajemen Pengembangan Aplikasi"
+VITE_DEBUG=false
+VITE_API_TIMEOUT=30000
+EOF
+
+if [ -f package-lock.json ]; then
+    npm ci
+else
+    npm install
+fi
 npm run build
-cd ..
 
-echo "6/6 Configuring Nginx Web Server..."
+echo "6/7 Configuring Nginx..."
 sudo tee /etc/nginx/sites-available/simpa > /dev/null <<EOF
 server {
     listen 80;
-    server_name simpa.plutolab.my.id;
+    server_name ${DOMAIN};
 
-    # Frontend Vue
+    root ${APP_DIR}/frontend/dist;
+    index index.html;
+
     location / {
-        root /var/www/simpa/frontend/dist;
         try_files \$uri \$uri/ /index.html;
     }
 
-    # Backend Laravel API
-    location /api {
-        alias /var/www/simpa/backend/public;
-        try_files \$uri \$uri/ @laravel;
+    location /storage/ {
+        alias ${APP_DIR}/backend/public/storage/;
     }
 
-    location @laravel {
-        rewrite ^/api/(.*)$ /api/index.php?/\$1 last;
+    location ^~ /api/ {
+        root ${APP_DIR}/backend/public;
+        try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
-    location ~ ^/api/index\.php$ {
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-        fastcgi_index index.php;
+    location = /api {
+        root ${APP_DIR}/backend/public;
+        try_files \$uri /index.php?\$query_string;
+    }
+
+    location = /index.php {
         include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME /var/www/simpa/backend/public/index.php;
+        fastcgi_pass unix:${PHP_FPM_SOCKET};
+        fastcgi_param SCRIPT_FILENAME ${APP_DIR}/backend/public/index.php;
+        fastcgi_param DOCUMENT_ROOT ${APP_DIR}/backend/public;
+    }
+
+    location ~ /\. {
+        deny all;
     }
 }
 EOF
 
 if [ -f "/etc/nginx/sites-enabled/default" ]; then
-    sudo rm /etc/nginx/sites-enabled/default
+    sudo rm -f /etc/nginx/sites-enabled/default
 fi
 sudo ln -sf /etc/nginx/sites-available/simpa /etc/nginx/sites-enabled/simpa
 sudo nginx -t
-sudo systemctl restart nginx
+
+echo "7/7 Restarting services..."
+sudo systemctl restart "${PHP_FPM_SERVICE}"
+sudo systemctl reload nginx
 
 echo "=========================================="
-echo "✅ Deployment Completed Successfully!"
-echo "🌐 Access the app at: http://simpa.plutolab.my.id"
+echo "Deployment completed successfully."
+echo "Access the app at: https://${DOMAIN}"
 echo "=========================================="
