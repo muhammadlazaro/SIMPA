@@ -6,7 +6,7 @@ APP_DIR="/var/www/${APP_NAME}"
 REPO_URL="https://github.com/muhammadlazaro/SIMPA.git"
 BRANCH="${BRANCH:-master}"
 DOMAIN="${DOMAIN:-simpa.plutolab.my.id}"
-API_BASE_URL="${API_BASE_URL:-https://${DOMAIN}/api}"
+API_BASE_URL="${API_BASE_URL:-https://${DOMAIN}}"
 
 DB_DATABASE="${DB_DATABASE:-smpa_db}"
 DB_USERNAME="${DB_USERNAME:-simpa}"
