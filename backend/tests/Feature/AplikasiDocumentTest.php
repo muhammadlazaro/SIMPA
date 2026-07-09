@@ -85,6 +85,13 @@ class AplikasiDocumentTest extends TestCase
             ])
             ->assertStatus(201)
             ->assertJsonPath('data.document.document_type', 'uat');
+
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $pengelola->id,
+            'aplikasi_id' => $app->id,
+            'type' => 'action_required',
+            'title' => 'Dokumen UAT Diunggah',
+        ]);
     }
 
     public function test_unit_kerja_cannot_upload_laporan_analisa_desain(): void

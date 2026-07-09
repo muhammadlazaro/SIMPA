@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AplikasiJenisDokumen;
+use App\Enums\UserRole;
 use App\Http\Helpers\ApiResponse;
 use App\Http\Requests\StoreAplikasiDocumentRequest;
 use App\Models\Aplikasi;
 use App\Models\AplikasiDocument;
+use App\Models\AppNotification;
+use App\Models\User;
 use App\Support\AplikasiDocumentAccess;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
@@ -122,6 +125,9 @@ class AplikasiDocumentController extends Controller
         }
 
         $doc->load('uploader:id,name');
+        if ($jenis === AplikasiJenisDokumen::Uat) {
+            $this->notifyPengelolaForUatDocument($aplikasi, $user);
+        }
 
         /** @var FilesystemAdapter $publicDisk */
         $publicDisk = Storage::disk('public');
@@ -138,5 +144,36 @@ class AplikasiDocumentController extends Controller
                 'created_at' => $doc->getAttribute('created_at'),
             ],
         ], 'Dokumen berhasil diunggah');
+    }
+
+    private function notifyPengelolaForUatDocument(Aplikasi $aplikasi, ?User $uploader): void
+    {
+        if (! $uploader?->isUnitKerja()) {
+            return;
+        }
+
+        $appName = (string) (
+            $aplikasi->getAttribute('nama_aplikasi')
+            ?: $aplikasi->getAttribute('nama_layanan')
+            ?: 'Aplikasi'
+        );
+        $uploaderName = (string) ($uploader->getAttribute('name') ?: 'Unit Kerja');
+
+        User::query()
+            ->where('role', UserRole::PENGELOLA_APLIKASI->value)
+            ->get(['id'])
+            ->each(function (User $pengelola) use ($aplikasi, $appName, $uploaderName): void {
+                AppNotification::create([
+                    'user_id' => $pengelola->getKey(),
+                    'aplikasi_id' => $aplikasi->getKey(),
+                    'type' => 'action_required',
+                    'title' => 'Dokumen UAT Diunggah',
+                    'body' => sprintf(
+                        'Dokumen UAT untuk aplikasi "%s" telah diunggah oleh %s. Silakan verifikasi hasil UAT.',
+                        $appName,
+                        $uploaderName
+                    ),
+                ]);
+            });
     }
 }

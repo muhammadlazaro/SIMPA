@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AplikasiStatus;
+use App\Enums\AplikasiJenisDokumen;
 use App\Http\Requests\StoreAplikasiRequest;
 use App\Http\Requests\UpdateAplikasiRequest;
 use App\Http\Helpers\ApiResponse;
@@ -46,6 +47,11 @@ class AplikasiController extends Controller
 
         // Eager load creator and updater to avoid N+1 queries
         $query->with(['creator:id,name', 'updater:id,name']);
+        $query->withExists([
+            'documents as has_active_uat_document' => fn ($documentQuery) => $documentQuery
+                ->where('document_type', AplikasiJenisDokumen::Uat->value)
+                ->where('status', 'active'),
+        ]);
 
         // Unit kerja melihat pengajuan miliknya sendiri, plus aplikasi UAT lama
         // yang dibuat non-Unit Kerja dan perlu ditindaklanjuti oleh role Unit Kerja.

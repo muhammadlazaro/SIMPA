@@ -157,13 +157,30 @@ function changePage(page) {
   loadAplikasiData(page)
 }
 
-function getNextActionText(status) {
-  const map = {
-    'perlu_perbaikan_pengajuan': 'Tindakan: Silakan perbaiki pengajuan',
-    'uat': 'Tindakan: Silakan unggah dokumen UAT',
-    'perbaikan_uat': 'Tindakan: Perbaiki dokumen UAT',
+function hasActiveUatDocument(app) {
+  return app?.has_active_uat_document === true || app?.has_active_uat_document === 1 || app?.has_active_uat_document === '1'
+}
+
+function getNextActionText(appOrStatus) {
+  const app = typeof appOrStatus === 'object' ? appOrStatus : null
+  const status = app?.status || appOrStatus
+
+  if (status === 'perlu_perbaikan_pengajuan') return 'Tindakan: Silakan perbaiki pengajuan'
+  if (status === 'uat') {
+    return hasActiveUatDocument(app)
+      ? 'Menunggu verifikasi UAT oleh Pengelola Aplikasi'
+      : 'Tindakan: Silakan unggah dokumen UAT'
   }
-  return map[status] || ''
+  if (status === 'perbaikan_uat') return 'Menunggu perbaikan UAT dari Tim Implementasi'
+
+  return ''
+}
+
+function getNextActionClass(app) {
+  if (!app) return ''
+  if (app.status === 'uat' && hasActiveUatDocument(app)) return 'is-waiting'
+  if (app.status === 'perbaikan_uat') return 'is-waiting'
+  return ''
 }
 
 </script>
@@ -311,8 +328,8 @@ function getNextActionText(status) {
                         <span :class="['badge', getStatusBadgeClass(app.status)]" :title="getStatusTooltip(app.status)">
                           {{ getStatusLabel(app.status) }}
                         </span>
-                        <div v-if="getNextActionText(app.status)" class="next-action-text">
-                          {{ getNextActionText(app.status) }}
+                        <div v-if="getNextActionText(app)" :class="['next-action-text', getNextActionClass(app)]">
+                          {{ getNextActionText(app) }}
                         </div>
                       </div>
                     </td>
@@ -743,5 +760,9 @@ function getNextActionText(status) {
   color: #d97706;
   font-weight: 500;
   line-height: 1.2;
+}
+
+.next-action-text.is-waiting {
+  color: #2563eb;
 }
 </style>

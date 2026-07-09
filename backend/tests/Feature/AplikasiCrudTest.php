@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Aplikasi;
+use App\Models\AplikasiDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -369,6 +370,35 @@ class AplikasiCrudTest extends TestCase
             ->getJson("/api/aplikasi/{$uatApp->id}")
             ->assertStatus(200)
             ->assertJsonPath('data.id', $uatApp->id);
+    }
+
+    public function test_aplikasi_index_marks_active_uat_document(): void
+    {
+        $uatApp = Aplikasi::factory()->create([
+            'created_by' => $this->pengelolaUser->id,
+            'status' => Aplikasi::STATUS_UAT,
+        ]);
+
+        AplikasiDocument::query()->create([
+            'aplikasi_id' => $uatApp->id,
+            'document_type' => 'uat',
+            'storage_path' => 'aplikasi_documents/uat.pdf',
+            'original_filename' => 'uat.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 1000,
+            'version' => 1,
+            'status' => 'active',
+            'uploaded_by' => $this->unitKerjaUser->id,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+            ->getJson('/api/aplikasi');
+
+        $response->assertStatus(200);
+
+        $item = collect($response->json('data'))->firstWhere('id', $uatApp->id);
+        $this->assertNotNull($item);
+        $this->assertTrue((bool) ($item['has_active_uat_document'] ?? false));
     }
 
     public function test_unit_kerja_cannot_see_other_unit_uat_application(): void

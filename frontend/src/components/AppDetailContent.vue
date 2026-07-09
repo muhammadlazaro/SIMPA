@@ -768,6 +768,10 @@ function getLatestDoc(type) {
   return sorted[0]
 }
 
+function hasActiveDocument(type) {
+  return (documentsByType.value[type] || []).some((doc) => doc.status === 'active')
+}
+
 const latestAnalystReport = computed(() => getLatestDoc('laporan_analisa_desain'))
 
 const implementationAnalisaSummary = computed(() => {
@@ -1510,6 +1514,14 @@ const isSpecialStatus = computed(() =>
 const userContextMessage = computed(() => {
   if (!props.unitKerjaMode || !app.value) return null
   const status = app.value.status
+  if (status === 'uat' && hasActiveDocument('uat')) {
+    return {
+      type: 'info',
+      title: 'Menunggu Verifikasi UAT',
+      desc: 'Dokumen UAT sudah diunggah. Pengelola Aplikasi akan memverifikasi hasil UAT: jika sesuai, aplikasi lanjut ke Uji Keamanan; jika belum sesuai, aplikasi masuk Perbaikan UAT.'
+    }
+  }
+
   const map = {
     'diajukan': { type: 'info', title: 'Menunggu Verifikasi', desc: 'Pengajuan Anda sedang diperiksa oleh tim pengelola. Tidak ada tindakan yang perlu Anda lakukan saat ini.' },
     'perlu_perbaikan_pengajuan': { type: 'warning', title: 'Perbaikan Diperlukan', desc: 'Tim pengelola meminta perbaikan pada formulir pengajuan Anda. Silakan cek catatan di bawah.' },
@@ -1519,7 +1531,7 @@ const userContextMessage = computed(() => {
     'analisa_desain': { type: 'info', title: 'Analisa & Desain', desc: 'Tim analis sedang menyusun dokumen teknis berdasarkan pengajuan Anda.' },
     'pengembangan': { type: 'info', title: 'Pengembangan', desc: 'Aplikasi sedang dibangun oleh tim implementasi.' },
     'uat': { type: 'warning', title: 'Tindakan Diperlukan: UAT', desc: 'Aplikasi siap diuji. Silakan unduh format UAT, lakukan pengujian, dan unggah hasilnya di panel dokumen di bawah.' },
-    'perbaikan_uat': { type: 'warning', title: 'Perbaikan UAT', desc: 'Tim implementasi sedang memperbaiki temuan dari pengujian (UAT) Anda.' },
+    'perbaikan_uat': { type: 'info', title: 'Menunggu Perbaikan UAT', desc: 'Pengelola meminta perbaikan dari hasil UAT. Tim Implementasi sedang menindaklanjuti temuan sebelum aplikasi dikirim kembali ke UAT.' },
     'uji_keamanan': { type: 'info', title: 'Uji Keamanan', desc: 'Aplikasi sedang diaudit oleh tim keamanan. Menunggu hasil pengujian.' },
     'perbaikan_keamanan': { type: 'info', title: 'Perbaikan Keamanan', desc: 'Tim implementasi sedang memperbaiki celah keamanan yang ditemukan.' },
     'siap_deploy': { type: 'success', title: 'Siap Deploy', desc: 'Seluruh tahapan selesai! Aplikasi Anda sedang dijadwalkan untuk dirilis ke production.' },

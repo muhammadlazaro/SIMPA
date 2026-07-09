@@ -171,13 +171,13 @@ class Aplikasi extends Model
                     ],
                 ],
 
-                // Siap UAT → pengelola harus verifikasi UAT
+                // Siap UAT: pengelola memantau sampai dokumen UAT diunggah unit kerja.
                 self::STATUS_UAT => [
                     [
                         'role'  => 'pengelola_aplikasi',
-                        'type'  => 'action_required',
-                        'title' => 'UAT Siap Diverifikasi',
-                        'body'  => 'Aplikasi "%s" telah selesai dikembangkan dan siap untuk verifikasi UAT.',
+                        'type'  => 'info',
+                        'title' => 'Aplikasi Masuk Tahap UAT',
+                        'body'  => 'Aplikasi "%s" telah selesai dikembangkan dan menunggu dokumen UAT dari Unit Kerja.',
                     ],
                 ],
 
