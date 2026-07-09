@@ -1,8 +1,16 @@
+@import '@fontsource/nunito-sans/latin-400.css';
+@import '@fontsource/nunito-sans/latin-500.css';
+@import '@fontsource/nunito-sans/latin-600.css';
+@import '@fontsource/nunito-sans/latin-700.css';
+@import '@fontsource/montserrat/latin-600.css';
+@import '@fontsource/montserrat/latin-700.css';
+@import '@fontsource/montserrat/latin-800.css';
+
 /* Theme V1 Design System */
 :root {
   /* Typography */
-  --notion-font-sans: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  --notion-font-brand: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --notion-font-sans: 'Nunito Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --notion-font-brand: 'Montserrat', 'Nunito Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 
   /* Colors */
   --notion-bg: #ffffff;
