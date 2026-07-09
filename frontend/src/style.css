@@ -1,10 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Nunito+Sans:wght@400;500;600;700&display=swap');
-
 /* Theme V1 Design System */
 :root {
   /* Typography */
-  --notion-font-sans: 'Nunito Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  --notion-font-brand: 'Montserrat', 'Nunito Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --notion-font-sans: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --notion-font-brand: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 
   /* Colors */
   --notion-bg: #ffffff;

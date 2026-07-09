@@ -7,9 +7,8 @@ return [
     | Cross-Origin Resource Sharing (CORS) Configuration
     |--------------------------------------------------------------------------
     |
-    | Here you may configure your settings for cross-origin resource sharing
-    | or "CORS". This determines what cross-origin operations may execute
-    | in web browsers. You are free to adjust these settings as needed.
+    | Production should only allow the deployed frontend origin. Development
+    | keeps Vite fallback ports available so local work remains smooth.
     |
     */
 
@@ -17,15 +16,14 @@ return [
 
     'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
-    'allowed_origins' => array_filter([
-        env('FRONTEND_URL', 'http://localhost:5173'),
-        // Tambahkan production URL di sini:
-        // env('FRONTEND_PRODUCTION_URL', 'https://your-domain.com'),
-    ]),
+    'allowed_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', env('CORS_ALLOWED_ORIGINS', env('FRONTEND_URL', 'http://localhost:5173')))
+    ))),
 
-    'allowed_origins_patterns' => [
-        // Izinkan port Vite dev (5173-5179) saat development — Vite memilih port fallback jika 5173 sibuk
+    'allowed_origins_patterns' => env('APP_ENV') === 'production' ? [] : [
         '#^http://localhost:517[3-9]$#',
+        '#^http://127\.0\.0\.1:517[3-9]$#',
     ],
 
     'allowed_headers' => [
@@ -40,9 +38,8 @@ return [
         'Authorization',
     ],
 
-    'max_age' => 3600, // Cache preflight requests for 1 hour
+    'max_age' => 3600,
 
-    'supports_credentials' => true, // Required for Sanctum auth
+    'supports_credentials' => true,
 
 ];
-

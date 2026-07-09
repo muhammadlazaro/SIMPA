@@ -22,10 +22,17 @@ class RfcController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'aplikasi_id' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $query = Rfc::with(['aplikasi:id,nama_aplikasi', 'creator:id,name', 'updater:id,name']);
         $this->scopeVisibleToUser($query, $request->user());
 
-        if ($search = $request->get('q')) {
+        $search = trim((string) ($validated['q'] ?? ''));
+        if ($search !== '') {
             $escaped = QueryHelper::escapeLike($search);
             $query->where(function ($q) use ($escaped) {
                 $q->where('deskripsi', 'like', "%{$escaped}%")
@@ -33,11 +40,11 @@ class RfcController extends Controller
             });
         }
 
-        if ($aplikasiId = $request->get('aplikasi_id')) {
+        if ($aplikasiId = ($validated['aplikasi_id'] ?? null)) {
             $query->where('aplikasi_id', $aplikasiId);
         }
 
-        $perPage = min(100, max(1, (int) $request->get('per_page', 10)));
+        $perPage = (int) ($validated['per_page'] ?? 10);
 
         return ApiResponse::paginated($query->orderByDesc('id')->paginate($perPage));
     }

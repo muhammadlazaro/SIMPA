@@ -24,8 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $safeJson = function (array $payload, int $status) {
+            return response()->json($payload, $status);
+        };
+
         // Handle validation exceptions
-        $exceptions->renderable(function (\Illuminate\Validation\ValidationException $e, $request) {
+        $exceptions->renderable(function (\Illuminate\Validation\ValidationException $e, $request) use ($safeJson) {
             // OWASP: Log all input validation failures
             \Log::warning('Validation failed', [
                 'path' => $request->path(),
@@ -35,7 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'user_id' => $request->user()?->getKey(),
             ]);
 
-            return response()->json([
+            return $safeJson([
                 'success' => false,
                 'message' => 'Terjadi kesalahan validasi',
                 'errors' => $e->errors()
@@ -43,7 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         // Handle authentication exceptions
-        $exceptions->renderable(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+        $exceptions->renderable(function (\Illuminate\Auth\AuthenticationException $e, $request) use ($safeJson) {
             // OWASP: Log attempts to connect with invalid or expired session tokens
             \Log::warning('Authentication failed', [
                 'path' => $request->path(),
@@ -52,14 +56,14 @@ return Application::configure(basePath: dirname(__DIR__))
                 'user_agent' => $request->userAgent(),
             ]);
 
-            return response()->json([
+            return $safeJson([
                 'success' => false,
                 'message' => 'Anda belum melakukan autentikasi'
             ], 401);
         });
 
         // Handle authorization exceptions
-        $exceptions->renderable(function (\Illuminate\Auth\Access\AuthorizationException $e, $request) {
+        $exceptions->renderable(function (\Illuminate\Auth\Access\AuthorizationException $e, $request) use ($safeJson) {
             // OWASP: Log all access control failures
             \Log::warning('Authorization denied', [
                 'path' => $request->path(),
@@ -69,30 +73,45 @@ return Application::configure(basePath: dirname(__DIR__))
                 'user_role' => $request->user()?->getAttribute('role'),
             ]);
 
-            return response()->json([
+            return $safeJson([
                 'success' => false,
                 'message' => 'Anda tidak memiliki akses untuk melakukan tindakan ini'
             ], 403);
         });
 
+        // Handle rate-limit exceptions without exposing framework file/trace details.
+        $exceptions->renderable(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, $request) use ($safeJson) {
+            \Log::warning('Rate limit exceeded', [
+                'path' => $request->path(),
+                'method' => $request->method(),
+                'ip' => $request->ip(),
+                'user_id' => $request->user()?->getKey(),
+            ]);
+
+            return $safeJson([
+                'success' => false,
+                'message' => 'Terlalu banyak percobaan. Silakan coba lagi nanti.'
+            ], 429);
+        });
+
         // Handle model not found exceptions
-        $exceptions->renderable(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
+        $exceptions->renderable(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e) use ($safeJson) {
+            return $safeJson([
                 'success' => false,
                 'message' => 'Data tidak ditemukan'
             ], 404);
         });
 
         // Handle route not found exceptions
-        $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e) {
-            return response()->json([
+        $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e) use ($safeJson) {
+            return $safeJson([
                 'success' => false,
                 'message' => 'Endpoint tidak ditemukan'
             ], 404);
         });
 
         // Handle all other exceptions
-        $exceptions->renderable(function (\Throwable $e) {
+        $exceptions->renderable(function (\Throwable $e) use ($safeJson) {
             // Log the error
             \Log::error('Application Error', [
                 'message' => $e->getMessage(),
@@ -103,16 +122,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Return generic error in production, detailed in development
             if (config('app.debug')) {
-                return response()->json([
+                return $safeJson([
                     'success' => false,
                     'message' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'trace' => explode("\n", $e->getTraceAsString())
+                    'type' => class_basename($e)
                 ], 500);
             }
 
-            return response()->json([
+            return $safeJson([
                 'success' => false,
                 'message' => 'Terjadi kesalahan pada server'
             ], 500);

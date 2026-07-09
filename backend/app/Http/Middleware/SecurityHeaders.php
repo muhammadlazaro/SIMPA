@@ -18,7 +18,7 @@ class SecurityHeaders
         $response = $next($request);
 
         // Prevent clickjacking attacks
-        $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
+        $response->headers->set('X-Frame-Options', 'DENY');
         
         // Prevent MIME type sniffing
         $response->headers->set('X-Content-Type-Options', 'nosniff');
@@ -29,26 +29,33 @@ class SecurityHeaders
         // Referrer policy
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         
-        $frontendUrl = (string) config('app.frontend_url', 'http://localhost:5173');
+        $frontendUrl = (string) config('app.frontend_url', '');
+        $appUrl = (string) config('app.url', '');
         $isProduction = (string) config('app.env') === 'production';
+        $connectSources = array_values(array_unique(array_filter([
+            "'self'",
+            $this->cspSource($appUrl),
+            $this->cspSource($frontendUrl),
+            $isProduction ? null : 'http://localhost:5173',
+            $isProduction ? null : 'http://127.0.0.1:5173',
+        ])));
 
         // Content Security Policy (CSP)
         $csp = [
             "default-src 'self'",
-            $isProduction
-                ? "script-src 'self'"
-                : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-            $isProduction
-                ? "style-src 'self'"
-                : "style-src 'self' 'unsafe-inline'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self' data:",
-            "connect-src 'self' {$frontendUrl}",
-            "frame-ancestors 'self'",
+            'connect-src '.implode(' ', $connectSources),
+            "object-src 'none'",
+            "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",
         ];
         $response->headers->set('Content-Security-Policy', implode('; ', $csp));
+        $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+        $response->headers->set('Cross-Origin-Resource-Policy', 'same-origin');
         
         // Permissions Policy (formerly Feature Policy)
         $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
@@ -68,5 +75,23 @@ class SecurityHeaders
 
         return $response;
     }
-}
 
+    private function cspSource(string $url): ?string
+    {
+        if ($url === '') {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return null;
+        }
+
+        $source = $parts['scheme'].'://'.$parts['host'];
+        if (!empty($parts['port'])) {
+            $source .= ':'.$parts['port'];
+        }
+
+        return $source;
+    }
+}

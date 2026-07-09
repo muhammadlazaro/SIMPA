@@ -96,6 +96,12 @@ set_env_value "APP_NAME" "\"Sistem Informasi Manajemen Pengembangan Aplikasi\""
 set_env_value "APP_ENV" "production"
 set_env_value "APP_DEBUG" "false"
 set_env_value "APP_URL" "https://${DOMAIN}"
+set_env_value "FRONTEND_URL" "https://${DOMAIN}"
+set_env_value "CORS_ALLOWED_ORIGINS" "https://${DOMAIN}"
+set_env_value "SANCTUM_STATEFUL_DOMAINS" "${DOMAIN}"
+set_env_value "SESSION_SECURE_COOKIE" "true"
+set_env_value "SESSION_HTTP_ONLY" "true"
+set_env_value "SESSION_SAME_SITE" "lax"
 set_env_value "DB_CONNECTION" "mysql"
 set_env_value "DB_HOST" "127.0.0.1"
 set_env_value "DB_PORT" "3306"
@@ -150,6 +156,15 @@ server {
 
     root ${APP_DIR}/frontend/dist;
     index index.html;
+
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://${DOMAIN}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     location / {
         try_files \$uri \$uri/ /index.html;

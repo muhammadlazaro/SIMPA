@@ -28,6 +28,19 @@ class AplikasiController extends Controller
      */
     public function index(Request $request)
     {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', 'string', 'max:500', function (string $attribute, mixed $value, \Closure $fail): void {
+                $allowedStatuses = AplikasiStatus::allValues();
+                $statuses = array_filter(array_map('trim', explode(',', (string) $value)));
+
+                if ($statuses === [] || count(array_diff($statuses, $allowedStatuses)) > 0) {
+                    $fail('Status aplikasi tidak valid.');
+                }
+            }],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $query = Aplikasi::query();
         $user = $request->user();
 
@@ -40,7 +53,8 @@ class AplikasiController extends Controller
             AplikasiAccess::scopeVisibleToUnitKerja($query, $user);
         }
 
-        if ($search = $request->get('q')) {
+        $search = trim((string) ($validated['q'] ?? ''));
+        if ($search !== '') {
             $escaped = QueryHelper::escapeLike($search);
             $query->where(function($q) use ($escaped) {
                 $q->where('nama_layanan', 'like', "%{$escaped}%")
@@ -52,16 +66,15 @@ class AplikasiController extends Controller
             });
         }
 
-        if ($status = $request->get('status')) {
-            // Support comma-separated statuses for role-based dashboard fetching
-            if (str_contains($status, ',')) {
-                $query->whereIn('status', array_map('trim', explode(',', $status)));
-            } else {
-                $query->where('status', trim($status));
-            }
+        $status = (string) ($validated['status'] ?? '');
+        if ($status !== '') {
+            $statuses = array_values(array_filter(array_map('trim', explode(',', $status))));
+            count($statuses) > 1
+                ? $query->whereIn('status', $statuses)
+                : $query->where('status', $statuses[0]);
         }
 
-        $perPage = min(100, max(1, (int) $request->get('per_page', 20)));
+        $perPage = (int) ($validated['per_page'] ?? 20);
         $items = $query->orderByDesc('id')->paginate($perPage);
         return ApiResponse::paginated($items);
     }
