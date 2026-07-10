@@ -121,15 +121,18 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         Route::post($aplikasiIdPath.'/restore', [AplikasiController::class, 'restore']);
         Route::get('aplikasi/trashed', [AplikasiController::class, 'trashed']);
 
-        Route::post('aplikasi/{aplikasi}/checklists', [AplikasiWorkflowController::class, 'storeChecklist']);
-        Route::put('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
-        Route::patch('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
-        Route::delete('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'destroyChecklist']);
-
         // RFC Management
         Route::put($rfcIdPath, [RfcController::class, 'update']);
         Route::patch($rfcIdPath, [RfcController::class, 'update']);
         Route::delete($rfcIdPath, [RfcController::class, 'destroy']);
+    });
+
+    // Analis desain mengelola checklist kelayakan/analisa pada halaman detail analisa.
+    Route::middleware('role:'.UserRole::ANALIS_DESAIN->value)->group(function () {
+        Route::post('aplikasi/{aplikasi}/checklists', [AplikasiWorkflowController::class, 'storeChecklist']);
+        Route::put('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
+        Route::patch('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
+        Route::delete('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'destroyChecklist']);
     });
     
     // Analisa Desain — akses bersama pengelola_aplikasi dan analis_desain

@@ -101,7 +101,7 @@ class AplikasiCrudTest extends TestCase
                 'nama_layanan' => 'Layanan Unit',
                 'nama_singkat' => 'LU',
                 'nama_aplikasi' => 'Aplikasi Unit',
-                'jenis_layanan_aplikasi' => 'internal',
+                'jenis_layanan_aplikasi' => 'pendukung',
                 'kode_unitOrganisasi' => 'UNIT001',
                 'tipe_akuisisi' => 'Custom-Made',
                 'surat_pengajuan' => UploadedFile::fake()->create('surat.pdf', 100),
@@ -111,6 +111,7 @@ class AplikasiCrudTest extends TestCase
 
         $this->assertDatabaseHas('aplikasis', [
             'nama_aplikasi' => 'Aplikasi Unit',
+            'jenis_layanan_aplikasi' => 'pendukung',
             'created_by' => $this->unitKerjaUser->id,
         ]);
     }
@@ -127,7 +128,7 @@ class AplikasiCrudTest extends TestCase
         $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
             ->putJson("/api/aplikasi/{$aplikasi->id}", [
                 'kode_unitOrganisasi' => 'UPDATED001',
-                'jenis_layanan_aplikasi' => 'internal',
+                'jenis_layanan_aplikasi' => 'pendukung',
                 'tipe_akuisisi' => 'Off-The-Shelf',
             ]);
 
@@ -138,6 +139,7 @@ class AplikasiCrudTest extends TestCase
             'id' => $aplikasi->id,
             'status' => 'pengembangan',
             'kode_unitOrganisasi' => 'UPDATED001',
+            'jenis_layanan_aplikasi' => 'pendukung',
         ]);
     }
 

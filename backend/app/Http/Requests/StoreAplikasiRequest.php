@@ -23,7 +23,7 @@ class StoreAplikasiRequest extends FormRequest
             'nama_layanan'           => ['required', 'string', 'max:255'],
             'nama_singkat'           => ['required', 'string', 'max:10'],
             'nama_aplikasi'          => ['required', 'string', 'max:255'],
-            'jenis_layanan_aplikasi' => ['required', 'in:publik,internal'],
+            'jenis_layanan_aplikasi' => ['required', 'in:publik,internal,pendukung'],
             'kode_unitOrganisasi'    => ['required', 'string', 'max:255'],
             'tipe_akuisisi'          => ['required', 'in:Custom-Made,Off-The-Shelf'],
             // Status ditetapkan otomatis sebagai Pengajuan saat create
@@ -44,7 +44,7 @@ class StoreAplikasiRequest extends FormRequest
             'nama_singkat.max'                => 'Nama Singkat maksimal 10 karakter.',
             'nama_aplikasi.required'          => 'Nama Aplikasi wajib diisi.',
             'jenis_layanan_aplikasi.required' => 'Jenis Layanan wajib dipilih.',
-            'jenis_layanan_aplikasi.in'       => 'Jenis Layanan harus publik atau internal.',
+            'jenis_layanan_aplikasi.in'       => 'Jenis Layanan harus publik, internal, atau pendukung.',
             'kode_unitOrganisasi.required'    => 'Kode Unit Organisasi wajib diisi.',
             'tipe_akuisisi.required'          => 'Tipe Akuisisi wajib dipilih.',
             'tipe_akuisisi.in'                => 'Tipe Akuisisi harus Custom-Made atau Off-The-Shelf.',

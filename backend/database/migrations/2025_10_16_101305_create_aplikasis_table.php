@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('nama_layanan');
             $table->string('nama_singkat');
             $table->string('nama_aplikasi');
-            $table->enum('jenis_layanan_aplikasi', ['publik', 'internal']);
+            $table->enum('jenis_layanan_aplikasi', ['publik', 'internal', 'pendukung']);
             $table->string('kode_unitOrganisasi');
             $table->string('tipe_akuisisi');
             $table->string('status');

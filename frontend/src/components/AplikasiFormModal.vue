@@ -278,6 +278,7 @@ const isNewApp = computed(() => !form.value.id)
                   <option value="" disabled selected>-- Pilih Jenis --</option>
                   <option value="publik">Publik</option>
                   <option value="internal">Internal</option>
+                  <option value="pendukung">Pendukung</option>
                 </select>
                 <small v-if="errors.jenis_layanan_aplikasi" class="error-message">{{ errors.jenis_layanan_aplikasi }}</small>
               </div>

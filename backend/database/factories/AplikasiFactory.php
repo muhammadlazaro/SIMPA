@@ -23,7 +23,7 @@ class AplikasiFactory extends Factory
             'nama_layanan' => $namaLayanan,
             'nama_singkat' => $namaSingkat,
             'nama_aplikasi' => 'App ' . fake()->word(),
-            'jenis_layanan_aplikasi' => fake()->randomElement(['publik', 'internal']),
+            'jenis_layanan_aplikasi' => fake()->randomElement(['publik', 'internal', 'pendukung']),
             'kode_unitOrganisasi' => fake()->bothify('ORG###'),
             'tipe_akuisisi' => fake()->randomElement(['Custom-Made', 'Off-The-Shelf']),
             'status' => fake()->randomElement(['diajukan', 'terverifikasi', 'pengembangan', 'deployed_staging', 'tidak_layak']),

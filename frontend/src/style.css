@@ -3860,3 +3860,163 @@ body {
     flex: 0 0 auto !important;
   }
 }
+
+/* Detail aplikasi: consistent page rhythm and alignment */
+#app .app-detail-container {
+  max-width: 1440px;
+  padding: 24px 32px 40px !important;
+}
+
+#app .app-detail-container .sticky-header-container {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+  gap: 18px !important;
+  margin: 0 0 18px !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+#app .app-detail-container .detail-hero-card,
+#app .app-detail-container .actions-card,
+#app .app-detail-container .uk-stepper-wrap,
+#app .app-detail-container .detail-tabs-card,
+#app .app-detail-container .detail-tab-panel,
+#app .app-detail-container .unit-doc-card,
+#app .app-detail-container .security-review-card {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+#app .app-detail-container .detail-hero-card {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding: 24px 28px !important;
+}
+
+#app .app-detail-container .actions-card {
+  margin: 0 !important;
+  padding: 22px 28px !important;
+}
+
+#app .app-detail-container .actions-header-inline {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center !important;
+  gap: 24px !important;
+}
+
+#app .app-detail-container .actions-row {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+}
+
+#app .app-detail-container .actions-row .btn {
+  min-width: 170px !important;
+}
+
+#app .app-detail-container .uk-stepper-wrap {
+  margin: 0 0 18px !important;
+  padding: 24px 28px 28px !important;
+  background: var(--ui-surface) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius-lg) !important;
+  box-shadow: var(--ui-shadow-sm) !important;
+}
+
+#app .app-detail-container .uk-stepper-header {
+  margin-bottom: 26px !important;
+}
+
+#app .app-detail-container .detail-tabs-card {
+  margin: 0 0 18px !important;
+  padding: 10px 14px !important;
+}
+
+#app .app-detail-container .detail-tabs {
+  display: flex !important;
+  gap: 8px !important;
+}
+
+#app .app-detail-container .detail-tabs button {
+  justify-content: center !important;
+  min-width: 108px !important;
+}
+
+#app .app-detail-container .detail-tab-panel {
+  margin: 0 0 20px !important;
+  padding: 24px 28px !important;
+  border-top: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius-lg) !important;
+}
+
+#app .app-detail-container .detail-tab-panel .section-title,
+#app .app-detail-container .detail-info-card .section-title {
+  margin-bottom: 18px !important;
+  padding-bottom: 14px !important;
+}
+
+#app .app-detail-container .detail-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+}
+
+#app .app-detail-container .detail-item {
+  box-sizing: border-box !important;
+  min-height: 104px !important;
+  padding: 18px 20px !important;
+  border-radius: var(--ui-radius-md) !important;
+}
+
+@media (max-width: 1100px) {
+  #app .app-detail-container {
+    padding: 20px 24px 32px !important;
+  }
+
+  #app .app-detail-container .actions-header-inline {
+    grid-template-columns: 1fr !important;
+  }
+
+  #app .app-detail-container .actions-row {
+    justify-content: flex-start !important;
+  }
+
+  #app .app-detail-container .detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  #app .app-detail-container {
+    padding: 70px 14px 28px !important;
+  }
+
+  #app .app-detail-container .sticky-header-container {
+    gap: 12px !important;
+    margin-bottom: 12px !important;
+  }
+
+  #app .app-detail-container .detail-hero-card,
+  #app .app-detail-container .actions-card,
+  #app .app-detail-container .uk-stepper-wrap,
+  #app .app-detail-container .detail-tabs-card,
+  #app .app-detail-container .detail-tab-panel {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  #app .app-detail-container .actions-row .btn {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #app .app-detail-container .detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

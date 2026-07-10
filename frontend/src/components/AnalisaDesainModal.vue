@@ -56,9 +56,6 @@ const newInterop = ref('')
 const newStorage = ref('')
 const newAktor = ref('')
 
-// Available aktor options
-const availableAktors = ['Pengelola', 'User', 'Pegawai']
-
 watch(() => props.show, async (newVal) => {
   if (newVal && (props.aplikasi || props.aplikasiId || props.appName)) {
     await loadData()
@@ -486,14 +483,20 @@ function close() {
             </div>
             <p v-else class="badge-empty-hint">Belum ada aktor yang dipilih</p>
             
-            <!-- Add new aktor dropdown -->
-            <div v-if="props.mode !== 'removeOnly'" class="platform-add-group">
-              <select v-model="newAktor" @change="handleAddAktor" class="platform-select" aria-label="Pilih aktor">
-                <option value="" disabled>+ Tambah Aktor</option>
-                <option v-for="aktorOption in availableAktors" :key="aktorOption" :value="aktorOption" :disabled="aktors.includes(aktorOption)">
-                  {{ aktorOption }}
-                </option>
-              </select>
+            <!-- Add new aktor input -->
+            <div v-if="props.mode !== 'removeOnly'" class="interop-add-group">
+              <input
+                type="text"
+                v-model="newAktor"
+                @keyup.enter="handleAddAktor"
+                placeholder="Ketik nama aktor spesifik..."
+                maxlength="100"
+                aria-label="Tambah aktor"
+                class="interop-input"
+              />
+              <button type="button" class="btn-add-small" @click="handleAddAktor" :disabled="!newAktor || !newAktor.trim()">
+                <Icons name="plus" :size="14" />
+              </button>
             </div>
           </div>
         </div>
@@ -575,12 +578,12 @@ function close() {
                 </div>
                 <div class="form-group">
                   <label>Aktor</label>
-                  <select v-model="transaksi.aktor_transaksi">
-                    <option value="" disabled selected>-- Pilih Aktor --</option>
-                    <option value="Pengelola">Pengelola</option>
-                    <option value="User">User</option>
-                    <option value="Pegawai">Pegawai</option>
-                  </select>
+                  <input
+                    type="text"
+                    v-model="transaksi.aktor_transaksi"
+                    placeholder="Contoh: Operator Unit Kerja"
+                    maxlength="100"
+                  />
                 </div>
               </div>
             </div>

@@ -81,6 +81,9 @@ const noteForm = ref({ body: '' })
 const savingChecklist = ref(false)
 const savingNote = ref(false)
 const updatingChecklistId = ref(null)
+const confirmingDeleteChecklist = ref(null)
+const confirmingDeleteNote = ref(null)
+const deletingNoteId = ref(null)
 
 // ==== WORKFLOW ACTIONS ====
 const showActionModal = ref(false)
@@ -420,8 +423,11 @@ const shouldLoadDocuments = computed(() => isDocumentPanelMode.value)
 const showTechnicalSections = computed(() => !props.unitKerjaMode && !props.securityMode && !props.analystMode)
 const showTabMenu = computed(() => true)
 const isImplementationContext = computed(() => isImplementationRole.value || isDevOpsRole.value || props.implementationMode)
+const canManageFeasibilityChecklist = computed(() => props.analystMode || auth.role === 'analis_desain')
+const showApplicationProgress = computed(() => props.unitKerjaMode || isPengelolaRole.value)
 const showFeasibilityChecklistPanel = computed(() =>
   isNonUnitKerjaRole.value &&
+  canManageFeasibilityChecklist.value &&
   !isImplementationContext.value &&
   activeTab.value === 'checklist'
 )
@@ -448,11 +454,12 @@ const COMMON_TABS = [
   { id: 'catatan',   label: 'Catatan' },
   { id: 'dokumen',   label: 'Dokumen' },
 ]
+const MAIN_TABS_WITHOUT_CHECKLIST = COMMON_TABS.filter(tab => tab.id !== 'checklist')
 
 const availableMainTabs = computed(() => {
-  // Pengelola Aplikasi: 4 tab standar (informasi, checklist, catatan, dokumen)
+  // Pengelola Aplikasi: fokus pada informasi, progres, catatan, dan dokumen.
   if (props.pengelolaMode || isPengelolaRole.value) {
-    return COMMON_TABS
+    return MAIN_TABS_WITHOUT_CHECKLIST
   }
   // Analis Desain: 4 tab standar
   if (props.analystMode) {
@@ -476,7 +483,7 @@ const availableMainTabs = computed(() => {
   // Tim Uji Keamanan: 4 tab standar + Hasil Uji
   if (props.securityMode) {
     return [
-      ...COMMON_TABS,
+      ...MAIN_TABS_WITHOUT_CHECKLIST,
       { id: 'hasil', label: 'Hasil Uji' },
     ]
   }
@@ -933,15 +940,29 @@ async function updateChecklist(item, patch) {
   }
 }
 
-async function deleteChecklist(item) {
-  if (!confirm(`Yakin ingin menghapus checklist "${item.title}"?`)) return
+function deleteChecklist(item) {
+  confirmingDeleteChecklist.value = item
+}
+
+function closeDeleteChecklistModal() {
+  if (updatingChecklistId.value) return
+  confirmingDeleteChecklist.value = null
+}
+
+async function confirmDeleteChecklist() {
+  const item = confirmingDeleteChecklist.value
+  if (!item) return
+  updatingChecklistId.value = item.id
   try {
     await http.delete(`/aplikasi/${route.params.id}/checklists/${item.id}`)
     toastStore.push('Checklist berhasil dihapus.', 'success')
+    confirmingDeleteChecklist.value = null
     await loadWorkflow()
   } catch (error) {
     const message = error?.response?.data?.message || 'Gagal menghapus checklist.'
     toastStore.push(message, 'error')
+  } finally {
+    updatingChecklistId.value = null
   }
 }
 
@@ -973,15 +994,29 @@ async function addNote() {
   }
 }
 
-async function deleteNote(item) {
-  if (!confirm('Yakin ingin menghapus catatan ini?')) return
+function deleteNote(item) {
+  confirmingDeleteNote.value = item
+}
+
+function closeDeleteNoteModal() {
+  if (deletingNoteId.value) return
+  confirmingDeleteNote.value = null
+}
+
+async function confirmDeleteNote() {
+  const item = confirmingDeleteNote.value
+  if (!item) return
+  deletingNoteId.value = item.id
   try {
     await http.delete(`/aplikasi/${route.params.id}/notes/${item.id}`)
     toastStore.push('Catatan berhasil dihapus.', 'success')
+    confirmingDeleteNote.value = null
     await loadWorkflow()
   } catch (error) {
     const message = error?.response?.data?.message || 'Gagal menghapus catatan.'
     toastStore.push(message, 'error')
+  } finally {
+    deletingNoteId.value = null
   }
 }
 
@@ -1545,7 +1580,7 @@ const userContextMessage = computed(() => {
 </script>
 
 <template>
-    <div class="container">
+    <div class="container app-detail-container">
       <!-- Sticky Header Area for Desktop -->
       <div class="sticky-header-container">
         <!-- Hero header card (konsisten dengan dashboard) -->
@@ -1596,7 +1631,52 @@ const userContextMessage = computed(() => {
           </div>
         </div>
         <!-- ===================================== -->
+
       </div>
+
+      <!-- ===== STEPPER PROGRES PENGAJUAN ===== -->
+      <div v-if="!loading && showApplicationProgress && app" class="uk-stepper-wrap">
+        <div class="uk-stepper-header">
+          <div class="uk-stepper-title-row">
+            <h3 class="uk-stepper-title">Progres Pengajuan</h3>
+            <span
+              v-if="isSpecialStatus"
+              class="uk-stepper-special-badge"
+            >{{ getShortStatusLabel(app.status) }}</span>
+          </div>
+          <p class="uk-stepper-subtitle">
+            Status saat ini:
+            <strong>{{ getShortStatusLabel(app.status) }}</strong>
+          </p>
+        </div>
+
+        <div class="uk-stepper">
+          <div
+            v-for="(step, idx) in progressSteps"
+            :key="idx"
+            :class="['uk-step', `uk-step--${getStepState(idx)}`]"
+          >
+            <div v-if="idx < progressSteps.length - 1" class="uk-step-connector">
+              <div :class="['uk-step-connector-fill', { filled: getStepState(idx) === 'done' || (getStepState(idx) === 'active') }]"></div>
+            </div>
+
+            <div class="uk-step-icon-wrap">
+              <div class="uk-step-icon">
+                <svg v-if="getStepState(idx) === 'done'" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                <div v-else-if="getStepState(idx) === 'active'" class="uk-step-active-dot"></div>
+                <span v-else class="uk-step-num">{{ idx + 1 }}</span>
+              </div>
+            </div>
+
+            <div class="uk-step-body">
+              <div class="uk-step-label">{{ step.label }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ===== END STEPPER ===== -->
 
 
       <!-- ===== UNIFIED MAIN TAB NAVIGATION (semua role kecuali unit_kerja) ===== -->
@@ -1705,11 +1785,6 @@ const userContextMessage = computed(() => {
             class="checklist-item-row"
             :class="item.item_status === 'done' ? 'checklist-item--done' : 'checklist-item--pending'"
           >
-            <!-- Ikon status -->
-            <div class="checklist-item-indicator">
-              <svg v-if="item.item_status === 'done'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-            </div>
             <!-- Konten -->
             <div class="checklist-item-body">
               <span class="checklist-item-title" :class="{ 'done-text': item.item_status === 'done' }">{{ item.title }}</span>
@@ -1801,56 +1876,6 @@ const userContextMessage = computed(() => {
         </div>
       </div>
       <!-- =========================================================== -->
-
-      <!-- ===== STEPPER PROGRES PENGAJUAN (Unit Kerja only) ===== -->
-      <div v-if="!loading && props.unitKerjaMode && app" class="uk-stepper-wrap">
-        <div class="uk-stepper-header">
-          <div class="uk-stepper-title-row">
-            <h3 class="uk-stepper-title">Progres Pengajuan</h3>
-            <span
-              v-if="isSpecialStatus"
-              class="uk-stepper-special-badge"
-            >{{ getShortStatusLabel(app.status) }}</span>
-          </div>
-          <p class="uk-stepper-subtitle">
-            Status saat ini:
-            <strong>{{ getShortStatusLabel(app.status) }}</strong>
-          </p>
-        </div>
-
-        <div class="uk-stepper">
-          <div
-            v-for="(step, idx) in progressSteps"
-            :key="idx"
-            :class="['uk-step', `uk-step--${getStepState(idx)}`]"
-          >
-            <!-- Connector line -->
-            <div v-if="idx < progressSteps.length - 1" class="uk-step-connector">
-              <div :class="['uk-step-connector-fill', { filled: getStepState(idx) === 'done' || (getStepState(idx) === 'active') }]"></div>
-            </div>
-
-            <!-- Icon circle -->
-            <div class="uk-step-icon-wrap">
-              <div class="uk-step-icon">
-                <!-- Done -->
-                <svg v-if="getStepState(idx) === 'done'" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
-                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-                <!-- Active -->
-                <div v-else-if="getStepState(idx) === 'active'" class="uk-step-active-dot"></div>
-                <!-- Pending -->
-                <span v-else class="uk-step-num">{{ idx + 1 }}</span>
-              </div>
-            </div>
-
-            <!-- Label only; deskripsi muncul saat hover via title. -->
-            <div class="uk-step-body">
-              <div class="uk-step-label">{{ step.label }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- ===== END STEPPER ===== -->
 
       <!-- ===== KONTEKS TINDAKAN SELANJUTNYA ===== -->
       <div v-if="!loading && props.unitKerjaMode && userContextMessage" class="uk-context-box" :class="`uk-context-${userContextMessage.type}`">
@@ -1955,14 +1980,6 @@ const userContextMessage = computed(() => {
             class="checklist-item-row"
             :class="`checklist-item--${item.item_status}`"
           >
-            <div class="checklist-item-indicator">
-              <!-- done -->
-              <svg v-if="item.item_status === 'done'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              <!-- in_progress -->
-              <svg v-else-if="item.item_status === 'in_progress'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              <!-- pending -->
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-            </div>
             <div class="checklist-item-body">
               <span class="checklist-item-title" :class="{ 'done-text': item.item_status === 'done' }">{{ item.title }}</span>
               <span v-if="item.notes" class="checklist-item-notes">{{ item.notes }}</span>
@@ -2442,6 +2459,66 @@ const userContextMessage = computed(() => {
         <div class="spinner"></div>
         <p>Memuat data...</p>
       </div>
+
+      <!-- ===== DELETE CHECKLIST MODAL ===== -->
+      <div v-if="confirmingDeleteChecklist" class="modal-backdrop" @click="closeDeleteChecklistModal">
+        <div class="modal-card confirm-delete-card" @click.stop>
+          <div class="modal-header">
+            <div>
+              <h3>Hapus Checklist</h3>
+              <p class="modal-subtitle">Konfirmasi penghapusan item checklist.</p>
+            </div>
+            <button class="modal-close" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="closeDeleteChecklistModal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="action-modal-copy">
+              Checklist <strong>{{ confirmingDeleteChecklist?.title }}</strong> akan dihapus dari aplikasi ini.
+            </p>
+            <p class="confirm-delete-note">Aksi ini tidak menghapus aplikasi atau dokumen, hanya item checklist yang dipilih.</p>
+          </div>
+          <div class="modal-footer action-modal-footer">
+            <button class="btn btn-secondary" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="closeDeleteChecklistModal">Batal</button>
+            <button class="btn btn-danger" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="confirmDeleteChecklist">
+              <span v-if="updatingChecklistId === confirmingDeleteChecklist?.id" class="spinner-small spinner-inline"></span>
+              {{ updatingChecklistId === confirmingDeleteChecklist?.id ? 'Menghapus...' : 'Hapus Checklist' }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- ================================= -->
+
+      <!-- ===== DELETE NOTE MODAL ===== -->
+      <div v-if="confirmingDeleteNote" class="modal-backdrop" @click="closeDeleteNoteModal">
+        <div class="modal-card confirm-delete-card" @click.stop>
+          <div class="modal-header">
+            <div>
+              <h3>Hapus Catatan</h3>
+              <p class="modal-subtitle">Konfirmasi penghapusan catatan diskusi.</p>
+            </div>
+            <button class="modal-close" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="closeDeleteNoteModal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="action-modal-copy">
+              Catatan dari <strong>{{ confirmingDeleteNote?.creator?.name || 'Sistem' }}</strong> akan dihapus dari riwayat aplikasi ini.
+            </p>
+            <div class="confirm-delete-preview">
+              <span v-if="confirmingDeleteNote?.note_type !== 'info'" class="timeline-badge" :class="confirmingDeleteNote?.note_type">
+                {{ noteTypeLabel(confirmingDeleteNote?.note_type) }}
+              </span>
+              <p>{{ confirmingDeleteNote?.body }}</p>
+            </div>
+            <p class="confirm-delete-note">Aksi ini hanya menghapus catatan yang dipilih dan tidak menghapus data aplikasi.</p>
+          </div>
+          <div class="modal-footer action-modal-footer">
+            <button class="btn btn-secondary" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="closeDeleteNoteModal">Batal</button>
+            <button class="btn btn-danger" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="confirmDeleteNote">
+              <span v-if="deletingNoteId === confirmingDeleteNote?.id" class="spinner-small spinner-inline"></span>
+              {{ deletingNoteId === confirmingDeleteNote?.id ? 'Menghapus...' : 'Hapus Catatan' }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- ============================= -->
 
       <!-- ===== DEACTIVATE APPLICATION MODAL ===== -->
       <div v-if="showDeactivateModal" class="modal-backdrop" @click="closeDeactivateModal">
@@ -4086,7 +4163,7 @@ const userContextMessage = computed(() => {
 
 .detail-tab-panel .checklist-item-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   padding: 14px 0;
@@ -4112,6 +4189,32 @@ const userContextMessage = computed(() => {
   color: var(--notion-text-tertiary);
   opacity: 0.55;
   margin-bottom: 10px;
+}
+
+.confirm-delete-note {
+  margin: 10px 0 0;
+  color: var(--notion-text-secondary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.confirm-delete-preview {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--notion-border);
+  border-radius: 10px;
+  background: var(--notion-muted-surface);
+}
+
+.confirm-delete-preview p {
+  display: -webkit-box;
+  margin: 8px 0 0;
+  color: var(--notion-text-primary);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .implementation-checklist-card {

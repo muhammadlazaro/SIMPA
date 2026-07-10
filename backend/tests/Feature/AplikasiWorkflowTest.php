@@ -16,10 +16,10 @@ class AplikasiWorkflowTest extends TestCase
 
     private const AUTH_HEADER_PREFIX = 'Bearer ';
 
-    public function test_pengelola_can_manage_checklists_and_notes(): void
+    public function test_analis_can_manage_feasibility_checklists_and_notes(): void
     {
-        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
-        $token = $pengelola->createToken('t')->plainTextToken;
+        $analis = User::factory()->create(['role' => 'analis_desain']);
+        $token = $analis->createToken('t')->plainTextToken;
         $aplikasi = Aplikasi::factory()->create();
 
         $checklist = $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)

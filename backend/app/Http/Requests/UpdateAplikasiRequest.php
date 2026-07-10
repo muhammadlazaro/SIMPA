@@ -34,7 +34,7 @@ class UpdateAplikasiRequest extends FormRequest
             'nama_aplikasi' => 'prohibited',
             
             // These fields can be updated
-            'jenis_layanan_aplikasi' => 'sometimes|required|in:publik,internal',
+            'jenis_layanan_aplikasi' => 'sometimes|required|in:publik,internal,pendukung',
             'kode_unitOrganisasi' => 'sometimes|required|string|max:50',
             'tipe_akuisisi' => 'sometimes|required|in:Custom-Made,Off-The-Shelf',
             // Status wajib melalui alur workflow API
