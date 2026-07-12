@@ -17,8 +17,6 @@ DB_USERNAME="${DB_USERNAME:-simpa}"
 DB_PASSWORD="${DB_PASSWORD:-$(generate_secret)}"
 DB_RUNTIME_USERNAME="${DB_RUNTIME_USERNAME:-${DB_USERNAME}}"
 DB_RUNTIME_PASSWORD="${DB_RUNTIME_PASSWORD:-${DB_PASSWORD}}"
-DB_MIGRATION_USERNAME="${DB_MIGRATION_USERNAME:-${DB_USERNAME}_migrator}"
-DB_MIGRATION_PASSWORD="${DB_MIGRATION_PASSWORD:-$(generate_secret)}"
 DB_BACKUP_USERNAME="${DB_BACKUP_USERNAME:-${DB_USERNAME}_backup}"
 DB_BACKUP_PASSWORD="${DB_BACKUP_PASSWORD:-$(generate_secret)}"
 DB_SOCKET="${DB_SOCKET:-/var/run/mysqld/mysqld.sock}"
@@ -127,8 +125,6 @@ echo "2/7 Ensuring MySQL database exists..."
 DB_DATABASE_SQL="$(sql_identifier "${DB_DATABASE}")"
 DB_RUNTIME_USERNAME_SQL="$(sql_string "${DB_RUNTIME_USERNAME}")"
 DB_RUNTIME_PASSWORD_SQL="$(sql_string "${DB_RUNTIME_PASSWORD}")"
-DB_MIGRATION_USERNAME_SQL="$(sql_string "${DB_MIGRATION_USERNAME}")"
-DB_MIGRATION_PASSWORD_SQL="$(sql_string "${DB_MIGRATION_PASSWORD}")"
 DB_BACKUP_USERNAME_SQL="$(sql_string "${DB_BACKUP_USERNAME}")"
 DB_BACKUP_PASSWORD_SQL="$(sql_string "${DB_BACKUP_PASSWORD}")"
 
@@ -140,10 +136,6 @@ ALTER USER '${DB_RUNTIME_USERNAME_SQL}'@'localhost' IDENTIFIED BY '${DB_RUNTIME_
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${DB_RUNTIME_USERNAME_SQL}'@'localhost';
 GRANT SELECT, INSERT, UPDATE, DELETE, SHOW VIEW, TRIGGER, EVENT ON \`${DB_DATABASE_SQL}\`.* TO '${DB_RUNTIME_USERNAME_SQL}'@'localhost';
 
-CREATE USER IF NOT EXISTS '${DB_MIGRATION_USERNAME_SQL}'@'localhost' IDENTIFIED BY '${DB_MIGRATION_PASSWORD_SQL}';
-ALTER USER '${DB_MIGRATION_USERNAME_SQL}'@'localhost' IDENTIFIED BY '${DB_MIGRATION_PASSWORD_SQL}';
-GRANT ALL PRIVILEGES ON \`${DB_DATABASE_SQL}\`.* TO '${DB_MIGRATION_USERNAME_SQL}'@'localhost';
-
 CREATE USER IF NOT EXISTS '${DB_BACKUP_USERNAME_SQL}'@'localhost' IDENTIFIED BY '${DB_BACKUP_PASSWORD_SQL}';
 ALTER USER '${DB_BACKUP_USERNAME_SQL}'@'localhost' IDENTIFIED BY '${DB_BACKUP_PASSWORD_SQL}';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${DB_BACKUP_USERNAME_SQL}'@'localhost';
@@ -152,10 +144,25 @@ GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON \`${DB_DATABASE_SQL}\`.*
 FLUSH PRIVILEGES;
 SQL
 
-if ! check_mysql_login "${DB_MIGRATION_USERNAME}" "${DB_MIGRATION_PASSWORD}" "${DB_DATABASE}"; then
-    echo "ERROR: MySQL migrator user cannot connect after provisioning."
-    echo "User: ${DB_MIGRATION_USERNAME}@localhost"
-    echo "Check MySQL root access, authentication plugin, and DB_MIGRATION_PASSWORD."
+grant_runtime_migration_privileges() {
+    sudo mysql <<SQL
+GRANT ALL PRIVILEGES ON \`${DB_DATABASE_SQL}\`.* TO '${DB_RUNTIME_USERNAME_SQL}'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+}
+
+restore_runtime_app_privileges() {
+    sudo mysql <<SQL
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${DB_RUNTIME_USERNAME_SQL}'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, SHOW VIEW, TRIGGER, EVENT ON \`${DB_DATABASE_SQL}\`.* TO '${DB_RUNTIME_USERNAME_SQL}'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+}
+
+if ! check_mysql_login "${DB_RUNTIME_USERNAME}" "${DB_RUNTIME_PASSWORD}" "${DB_DATABASE}"; then
+    echo "ERROR: MySQL runtime user cannot connect after provisioning."
+    echo "User: ${DB_RUNTIME_USERNAME}@localhost"
+    echo "Check MySQL root access and DB_PASSWORD."
     exit 1
 fi
 
@@ -227,8 +234,8 @@ else
 fi
 set_env_value "DB_PORT" "3306"
 set_env_value "DB_DATABASE" "${DB_DATABASE}"
-set_env_value "DB_USERNAME" "${DB_MIGRATION_USERNAME}"
-set_env_value "DB_PASSWORD" "${DB_MIGRATION_PASSWORD}"
+set_env_value "DB_USERNAME" "${DB_RUNTIME_USERNAME}"
+set_env_value "DB_PASSWORD" "${DB_RUNTIME_PASSWORD}"
 
 if [ -n "${MYSQL_ATTR_SSL_CA}" ]; then
     set_env_value "MYSQL_ATTR_SSL_CA" "${MYSQL_ATTR_SSL_CA}"
@@ -242,20 +249,22 @@ fi
 composer install --optimize-autoloader --no-dev
 
 php artisan config:clear || true
-if ! check_mysql_login "${DB_MIGRATION_USERNAME}" "${DB_MIGRATION_PASSWORD}" "${DB_DATABASE}"; then
-    echo "ERROR: MySQL migrator user cannot connect before running migrations."
-    echo "Restoring runtime database credentials in backend/.env."
+if ! check_mysql_login "${DB_RUNTIME_USERNAME}" "${DB_RUNTIME_PASSWORD}" "${DB_DATABASE}"; then
+    echo "ERROR: MySQL runtime user cannot connect before running migrations."
     restore_runtime_db_env
     exit 1
 fi
 
+grant_runtime_migration_privileges
 if ! php artisan migrate --force; then
     echo "ERROR: Laravel migrations failed."
-    echo "Restoring runtime database credentials in backend/.env."
+    echo "Restoring runtime database credentials and least-privilege grants."
+    restore_runtime_app_privileges
     restore_runtime_db_env
     php artisan config:clear || true
     exit 1
 fi
+restore_runtime_app_privileges
 
 if [ "${RUN_SEED}" = "true" ]; then
     php artisan db:seed --force
