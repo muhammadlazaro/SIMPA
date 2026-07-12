@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+generate_secret() {
+    od -An -N24 -tx1 /dev/urandom | tr -d ' \n'
+}
+
 APP_NAME="simpa"
 APP_DIR="/var/www/${APP_NAME}"
 REPO_URL="https://github.com/muhammadlazaro/SIMPA.git"
@@ -10,13 +14,13 @@ API_BASE_URL="${API_BASE_URL:-https://${DOMAIN}}"
 
 DB_DATABASE="${DB_DATABASE:-smpa_db}"
 DB_USERNAME="${DB_USERNAME:-simpa}"
-DB_PASSWORD="${DB_PASSWORD:-simpa_secret}"
+DB_PASSWORD="${DB_PASSWORD:-$(generate_secret)}"
 DB_RUNTIME_USERNAME="${DB_RUNTIME_USERNAME:-${DB_USERNAME}}"
 DB_RUNTIME_PASSWORD="${DB_RUNTIME_PASSWORD:-${DB_PASSWORD}}"
 DB_MIGRATION_USERNAME="${DB_MIGRATION_USERNAME:-${DB_USERNAME}_migrator}"
-DB_MIGRATION_PASSWORD="${DB_MIGRATION_PASSWORD:-${DB_PASSWORD}_migration}"
+DB_MIGRATION_PASSWORD="${DB_MIGRATION_PASSWORD:-$(generate_secret)}"
 DB_BACKUP_USERNAME="${DB_BACKUP_USERNAME:-${DB_USERNAME}_backup}"
-DB_BACKUP_PASSWORD="${DB_BACKUP_PASSWORD:-${DB_PASSWORD}_backup}"
+DB_BACKUP_PASSWORD="${DB_BACKUP_PASSWORD:-$(generate_secret)}"
 DB_SOCKET="${DB_SOCKET:-/var/run/mysqld/mysqld.sock}"
 MYSQL_ATTR_SSL_CA="${MYSQL_ATTR_SSL_CA:-}"
 RUN_SEED="${RUN_SEED:-false}"
@@ -50,6 +54,24 @@ sql_string() {
 
 sql_identifier() {
     printf "%s" "$1" | sed 's/`/``/g'
+}
+
+check_mysql_login() {
+    local username="$1"
+    local password="$2"
+    local database="$3"
+    local mysql_args=()
+
+    if [ -S "${DB_SOCKET}" ]; then
+        mysql_args+=(--socket="${DB_SOCKET}")
+    else
+        mysql_args+=(--host=127.0.0.1 --port=3306)
+    fi
+
+    MYSQL_PWD="${password}" mysql "${mysql_args[@]}" \
+        --user="${username}" \
+        --database="${database}" \
+        --execute="SELECT 1;" >/dev/null
 }
 
 echo "=========================================="
@@ -130,6 +152,13 @@ GRANT SELECT, SHOW VIEW, TRIGGER, EVENT, LOCK TABLES ON \`${DB_DATABASE_SQL}\`.*
 FLUSH PRIVILEGES;
 SQL
 
+if ! check_mysql_login "${DB_MIGRATION_USERNAME}" "${DB_MIGRATION_PASSWORD}" "${DB_DATABASE}"; then
+    echo "ERROR: MySQL migrator user cannot connect after provisioning."
+    echo "User: ${DB_MIGRATION_USERNAME}@localhost"
+    echo "Check MySQL root access, authentication plugin, and DB_MIGRATION_PASSWORD."
+    exit 1
+fi
+
 echo "3/7 Syncing repository..."
 sudo mkdir -p "$(dirname "${APP_DIR}")"
 sudo chown -R "$USER:$USER" "$(dirname "${APP_DIR}")"
@@ -158,12 +187,20 @@ fi
 set_env_value() {
     local key="$1"
     local value="$2"
+    local escaped_value
+
+    escaped_value="$(printf "%s" "${value}" | sed -e 's/[\/&|\\]/\\&/g')"
 
     if grep -qE "^#?${key}=" .env; then
-        sed -i "s|^#\\?${key}=.*|${key}=${value}|g" .env
+        sed -i "s|^#\\?${key}=.*|${key}=${escaped_value}|g" .env
     else
         printf "\n%s=%s\n" "${key}" "${value}" >> .env
     fi
+}
+
+restore_runtime_db_env() {
+    set_env_value "DB_USERNAME" "${DB_RUNTIME_USERNAME}"
+    set_env_value "DB_PASSWORD" "${DB_RUNTIME_PASSWORD}"
 }
 
 set_env_value "APP_NAME" "\"Sistem Informasi Manajemen Pengembangan Aplikasi\""
@@ -205,14 +242,26 @@ fi
 composer install --optimize-autoloader --no-dev
 
 php artisan config:clear || true
-php artisan migrate --force
+if ! check_mysql_login "${DB_MIGRATION_USERNAME}" "${DB_MIGRATION_PASSWORD}" "${DB_DATABASE}"; then
+    echo "ERROR: MySQL migrator user cannot connect before running migrations."
+    echo "Restoring runtime database credentials in backend/.env."
+    restore_runtime_db_env
+    exit 1
+fi
+
+if ! php artisan migrate --force; then
+    echo "ERROR: Laravel migrations failed."
+    echo "Restoring runtime database credentials in backend/.env."
+    restore_runtime_db_env
+    php artisan config:clear || true
+    exit 1
+fi
 
 if [ "${RUN_SEED}" = "true" ]; then
     php artisan db:seed --force
 fi
 
-set_env_value "DB_USERNAME" "${DB_RUNTIME_USERNAME}"
-set_env_value "DB_PASSWORD" "${DB_RUNTIME_PASSWORD}"
+restore_runtime_db_env
 
 mkdir -p resources/views
 php artisan storage:link || true
