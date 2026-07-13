@@ -79,6 +79,38 @@ class ApiContractAndAuthorizationTest extends TestCase
         ]);
     }
 
+    public function test_cannot_create_second_open_rfc_for_same_application(): void
+    {
+        Storage::fake('public');
+
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $aplikasi = Aplikasi::factory()->production()->create();
+
+        Rfc::create([
+            'aplikasi_id' => $aplikasi->id,
+            'tipe_rfc' => 'Standar',
+            'deskripsi' => 'RFC yang masih berjalan.',
+            'pelaksana' => 'Internal Pusdatik',
+            'status_tindaklanjut' => Rfc::STATUS_ANALISA_DESAIN,
+        ]);
+
+        $response = $this->withHeader('Authorization', $this->bearer($pengelola))
+            ->post('/api/rfc', [
+                'aplikasi_id' => $aplikasi->id,
+                'tipe_rfc' => 'Minor',
+                'deskripsi' => 'RFC kedua untuk aplikasi yang sama.',
+                'pelaksana' => 'Internal Pusdatik',
+                'status_tindaklanjut' => Rfc::STATUS_DIAJUKAN,
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc-2.pdf', 128, 'application/pdf'),
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Aplikasi ini masih memiliki RFC yang belum selesai. Selesaikan RFC tersebut sebelum membuat RFC baru.');
+
+        $this->assertDatabaseCount('rfcs', 1);
+    }
+
     public function test_non_pengelola_cannot_create_rfc(): void
     {
         $developer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);

@@ -113,6 +113,14 @@ class RfcController extends Controller
                 $data['status_tindaklanjut'] ??= Rfc::STATUS_ANALISA_DESAIN;
             }
 
+            if ($this->hasOpenRfcForAplikasi((int) $aplikasi->getKey())) {
+                return ApiResponse::error(
+                    'Aplikasi ini masih memiliki RFC yang belum selesai. Selesaikan RFC tersebut sebelum membuat RFC baru.',
+                    null,
+                    422
+                );
+            }
+
             $path = $file->store('rfc_documents', 'public');
 
             $rfc = DB::transaction(function () use ($data, $file, $path) {
@@ -157,6 +165,23 @@ class RfcController extends Controller
             unset($payload['formulir_rfc']);
 
             $file = $request->file('formulir_rfc');
+
+            if (array_key_exists('aplikasi_id', $payload)) {
+                $currentRfc = Rfc::select('id', 'aplikasi_id')->findOrFail($id);
+                $targetAplikasiId = (int) $payload['aplikasi_id'];
+
+                if (
+                    $targetAplikasiId !== (int) $currentRfc->aplikasi_id
+                    && $this->hasOpenRfcForAplikasi($targetAplikasiId, (int) $currentRfc->getKey())
+                ) {
+                    return ApiResponse::error(
+                        'Aplikasi ini masih memiliki RFC yang belum selesai. Selesaikan RFC tersebut sebelum memindahkan RFC lain ke aplikasi ini.',
+                        null,
+                        422
+                    );
+                }
+            }
+
             if ($file) {
                 $newPath = $file->store('rfc_documents', 'public');
             }
@@ -242,6 +267,19 @@ class RfcController extends Controller
         }
 
         return $query;
+    }
+
+    private function hasOpenRfcForAplikasi(int $aplikasiId, ?int $exceptRfcId = null): bool
+    {
+        $query = Rfc::query()
+            ->where('aplikasi_id', $aplikasiId)
+            ->whereIn('status_tindaklanjut', Rfc::OPEN_STATUS_VALUES);
+
+        if ($exceptRfcId !== null) {
+            $query->where('id', '!=', $exceptRfcId);
+        }
+
+        return $query->exists();
     }
 
     private function notifyPengelolaForUnitKerjaSubmission(Rfc $rfc): void

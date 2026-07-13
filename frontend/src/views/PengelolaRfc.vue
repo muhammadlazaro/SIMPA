@@ -87,8 +87,6 @@ const selectedStatus = ref('')
 const showDeleteModal = ref(false)
 const deleteTarget = ref(null)
 const deletingRfc = ref(false)
-const showDetailModal = ref(false)
-const detailTarget = ref(null)
 const stats = ref({ development: 0, operational: 0, inactive: 0 })
 
 let searchTimer = null
@@ -123,19 +121,13 @@ function closeForm() {
 }
 
 function openDetail(item) {
-  detailTarget.value = item
-  showDetailModal.value = true
-}
+  const appId = item?.aplikasi_id || item?.aplikasi?.id
+  if (!appId) {
+    toast.push('Aplikasi RFC tidak ditemukan.', 'error')
+    return
+  }
 
-function closeDetail() {
-  showDetailModal.value = false
-  detailTarget.value = null
-}
-
-function editFromDetail() {
-  const item = detailTarget.value
-  closeDetail()
-  if (item) openEdit(item)
+  router.push({ name: 'pengelola-aplikasi-app-detail', params: { id: appId } })
 }
 
 function confirmDelete(item) {
@@ -664,54 +656,6 @@ async function submitRfc() {
               </div>
             </template>
           </form>
-        </div>
-      </dialog>
-
-      <dialog v-if="showDetailModal" class="modal active" open aria-labelledby="modal-rfc-detail-title" @click.self="closeDetail">
-        <div class="modal-content rfc-detail-modal">
-          <div class="modal-header">
-            <h3 id="modal-rfc-detail-title">Detail RFC</h3>
-            <button class="close-btn" type="button" @click="closeDetail" aria-label="Tutup detail RFC">&times;</button>
-          </div>
-          <div class="rfc-detail-grid">
-            <div>
-              <span>Aplikasi</span>
-              <strong>{{ detailTarget?.aplikasi?.nama_aplikasi || '-' }}</strong>
-            </div>
-            <div>
-              <span>Tipe RFC</span>
-              <strong>{{ detailTarget?.tipe_rfc || '-' }}</strong>
-            </div>
-            <div>
-              <span>Pelaksana</span>
-              <strong>{{ detailTarget?.pelaksana || '-' }}</strong>
-            </div>
-            <div>
-              <span>Status</span>
-              <strong>{{ detailTarget?.status_tindaklanjut || '-' }}</strong>
-            </div>
-            <div class="rfc-detail-full">
-              <span>Formulir RFC</span>
-              <a
-                v-if="detailTarget?.formulir_url"
-                :href="detailTarget.formulir_url"
-                class="existing-file-link"
-                target="_blank"
-                rel="noopener"
-              >
-                <Icons name="file-text" :size="16" />
-                {{ detailTarget.formulir_original_filename || 'Buka formulir RFC' }}
-              </a>
-              <p v-else>-</p>
-            </div>
-          </div>
-          <div class="rfc-modal-actions">
-            <button type="button" class="btn btn-secondary" @click="closeDetail">Tutup</button>
-            <button type="button" class="btn btn-primary" @click="editFromDetail">
-              <Icons name="edit" :size="14" />
-              Edit RFC
-            </button>
-          </div>
         </div>
       </dialog>
 

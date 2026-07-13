@@ -26,6 +26,13 @@ class Rfc extends Model
         self::STATUS_UAT,
     ];
 
+    public const OPEN_STATUS_VALUES = [
+        self::STATUS_DIAJUKAN,
+        self::STATUS_ANALISA_DESAIN,
+        self::STATUS_DEV_STAGING,
+        self::STATUS_UAT,
+    ];
+
     public const TIPE_VALUES = [
         'Medium',
         'Standar',
@@ -101,5 +108,4 @@ class Rfc extends Model
         return $path ? Storage::disk('public')->url((string) $path) : null;
     }
 }
-
 
