@@ -20,7 +20,49 @@ const router = useRouter()
 const apps = ref([])
 const loading = ref(false)
 const searchAplikasi = ref('')
-const hasActiveSearch = computed(() => !!searchAplikasi.value?.trim())
+const filters = ref({
+  statusGroup: 'all',
+  processStatus: 'all',
+})
+
+const DEVELOPMENT_STATUSES = [
+  'diajukan',
+  'perlu_perbaikan_pengajuan',
+  'terverifikasi',
+  'layak',
+  'analisa_desain',
+  'pengembangan',
+  'uat',
+  'perbaikan_uat',
+  'uji_keamanan',
+  'perbaikan_keamanan',
+  'siap_deploy',
+  'deployed_staging',
+]
+const OPERATIONAL_STATUSES = ['deployed_production']
+const INACTIVE_STATUSES = ['nonaktif']
+const STOPPED_STATUSES = ['ditolak', 'tidak_layak']
+
+const STATUS_GROUP_OPTIONS = [
+  { value: 'all', label: 'Semua Status', statuses: [] },
+  { value: 'development', label: 'Development', statuses: DEVELOPMENT_STATUSES },
+  { value: 'operational', label: 'Operasional', statuses: OPERATIONAL_STATUSES },
+  { value: 'inactive', label: 'Nonaktif', statuses: INACTIVE_STATUSES },
+]
+
+const PROCESS_STATUS_OPTIONS = [
+  ...DEVELOPMENT_STATUSES.slice(0, 4),
+  ...STOPPED_STATUSES,
+  ...DEVELOPMENT_STATUSES.slice(4),
+  ...OPERATIONAL_STATUSES,
+  ...INACTIVE_STATUSES,
+]
+
+const hasActiveFilter = computed(() =>
+  !!searchAplikasi.value?.trim()
+  || filters.value.statusGroup !== 'all'
+  || filters.value.processStatus !== 'all'
+)
 
 const appsPagination = ref({
   currentPage: 1,
@@ -37,7 +79,7 @@ const showDeleteModal = ref(false)
 const deleteTarget = ref(null)
 const deletingApp = ref(false)
 
-const stats = ref({ development: 0, operational: 0, inactive: 0 })
+const stats = ref({ development: 0, operational: 0, inactive: 0, stopped: 0 })
 
 const {
   count: pengajuanBaruCount,
@@ -54,10 +96,11 @@ async function loadGlobalStats() {
       development: data.development || 0,
       operational: data.operational || 0,
       inactive: data.inactive || 0,
+      stopped: data.stopped || 0,
     }
   } catch (error) {
     warnDev('[PengelolaDashboard] loadGlobalStats error:', error)
-    stats.value = { development: 0, operational: 0, inactive: 0 }
+    stats.value = { development: 0, operational: 0, inactive: 0, stopped: 0 }
   }
 }
 
@@ -76,10 +119,17 @@ onBeforeUnmount(() => {
 async function loadAplikasiData(page = 1) {
   loading.value = true
   try {
-    const searchQuery = searchAplikasi.value?.trim()
-      ? `q=${encodeURIComponent(searchAplikasi.value.trim())}&`
-      : ''
-    const response = await http.get(`/aplikasi?${searchQuery}per_page=${appsPagination.value.perPage}&page=${page}`)
+    const params = new URLSearchParams({
+      per_page: String(appsPagination.value.perPage),
+      page: String(page),
+    })
+    const search = searchAplikasi.value?.trim()
+    const statusFilter = getStatusFilterValue()
+
+    if (search) params.set('q', search)
+    if (statusFilter) params.set('status', statusFilter)
+
+    const response = await http.get(`/aplikasi?${params.toString()}`)
 
     if (response.data.data) {
       const meta = response.data.meta || response.data
@@ -108,8 +158,40 @@ function scheduleSearch() {
   }, 350)
 }
 
-function clearSearch() {
+function getStatusFilterValue() {
+  if (filters.value.processStatus !== 'all') return filters.value.processStatus
+
+  const group = STATUS_GROUP_OPTIONS.find((item) => item.value === filters.value.statusGroup)
+  return group?.statuses?.length ? group.statuses.join(',') : ''
+}
+
+function getGroupCount(groupValue) {
+  if (groupValue === 'development') return stats.value.development
+  if (groupValue === 'operational') return stats.value.operational
+  if (groupValue === 'inactive') return stats.value.inactive
+  if (groupValue === 'stopped') return stats.value.stopped
+
+  return stats.value.development + stats.value.operational + stats.value.inactive + stats.value.stopped
+}
+
+function applyStatusGroupFilter() {
+  filters.value.processStatus = 'all'
+  loadAplikasiData(1)
+}
+
+function applyProcessFilter() {
+  if (filters.value.processStatus !== 'all') {
+    filters.value.statusGroup = 'all'
+  }
+  loadAplikasiData(1)
+}
+
+function clearFilters() {
   searchAplikasi.value = ''
+  filters.value = {
+    statusGroup: 'all',
+    processStatus: 'all',
+  }
   loadAplikasiData(1)
 }
 
@@ -252,11 +334,32 @@ async function onAppSaved() {
                 type="text" 
                 v-model="searchAplikasi" 
                 @input="scheduleSearch"
-                placeholder="Cari aplikasi..."
+                placeholder="Cari aplikasi"
                 maxlength="50" 
                 aria-label="Cari aplikasi"
               />
             </div>
+            <select
+              v-model="filters.statusGroup"
+              class="filter-select compact"
+              aria-label="Filter kategori status aplikasi"
+              @change="applyStatusGroupFilter"
+            >
+              <option v-for="group in STATUS_GROUP_OPTIONS" :key="group.value" :value="group.value">
+                {{ group.label }}
+              </option>
+            </select>
+            <select
+              v-model="filters.processStatus"
+              class="filter-select compact process"
+              aria-label="Filter proses aplikasi"
+              @change="applyProcessFilter"
+            >
+              <option value="all">Tahap Proses</option>
+              <option v-for="status in PROCESS_STATUS_OPTIONS" :key="status" :value="status">
+                {{ getShortStatusLabel(status) }}
+              </option>
+            </select>
             <button class="btn btn-primary" @click="openAddModal">
               <Icons name="plus" :size="16" />
               Tambah Aplikasi
@@ -268,16 +371,16 @@ async function onAppSaved() {
           <div class="loading-spinner"></div>
           <p>Memuat data aplikasi...</p>
         </div>
-        <div v-else-if="apps.length === 0 && hasActiveSearch" class="global-empty">
+        <div v-else-if="apps.length === 0 && hasActiveFilter" class="global-empty">
           <div class="global-empty-icon-wrapper">
             <Icons name="search" :size="48" class="global-empty-icon" />
           </div>
           <h3 class="global-empty-title">Tidak Ada Hasil</h3>
           <p class="global-empty-text">
-            Tidak ada aplikasi yang cocok dengan kata kunci pencarian ini.
+            Tidak ada aplikasi yang cocok dengan filter ini.
           </p>
-          <button type="button" class="btn btn-secondary" @click="clearSearch">
-            Hapus pencarian
+          <button type="button" class="btn btn-secondary" @click="clearFilters">
+            Hapus filter
           </button>
         </div>
         <div v-else-if="apps.length === 0" class="global-empty">
@@ -486,11 +589,33 @@ async function onAppSaved() {
   border-color: #d1d5db;
 }
 
+.filter-select:focus-visible {
+  outline: 3px solid rgba(30, 64, 175, 0.2);
+  outline-offset: 2px;
+}
+
+.filter-select {
+  min-width: 168px;
+  height: 44px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
 @media (max-width: 768px) {
   .stats-grid { grid-template-columns: 1fr; }
   .stat-card { padding: 16px; }
   .stat-value { font-size: 24px; }
   .stat-label { font-size: 13px; }
+  .filter-select {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 .pengajuan-alert {
