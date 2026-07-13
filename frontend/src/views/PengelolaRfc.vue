@@ -104,10 +104,11 @@ function resetForm() {
   if (rfcFileInput.value) rfcFileInput.value.value = ''
 }
 
-function openAdd() {
+async function openAdd() {
   editing.value = null
   resetForm()
   showForm.value = true
+  await loadActiveApps()
 }
 
 function openEdit(item) {
@@ -247,8 +248,11 @@ async function loadRfcs(page = 1) {
 
 async function loadActiveApps() {
   try {
-    const resp = await http.get('/aplikasi?per_page=200')
-    appsActive.value = (resp.data.data || resp.data || []).map((a) => ({ id: a.id, name: a.nama_aplikasi }))
+    const resp = await http.get('/aplikasi?status=deployed_production&per_page=100')
+    appsActive.value = (resp.data.data || resp.data || []).map((a) => ({
+      id: a.id,
+      name: a.nama_aplikasi || a.nama_layanan || a.nama_singkat || `Aplikasi #${a.id}`,
+    }))
   } catch (error) {
     warnDev('[PengelolaRfc] loadActiveApps error:', error)
     appsActive.value = []

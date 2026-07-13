@@ -127,6 +127,9 @@ class AplikasiCrudTest extends TestCase
 
         $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
             ->putJson("/api/aplikasi/{$aplikasi->id}", [
+                'nama_layanan' => 'Test Layanan Updated',
+                'nama_singkat' => 'TLU',
+                'nama_aplikasi' => 'Test App Updated',
                 'kode_unitOrganisasi' => 'UPDATED001',
                 'jenis_layanan_aplikasi' => 'pendukung',
                 'tipe_akuisisi' => 'Off-The-Shelf',
@@ -138,32 +141,33 @@ class AplikasiCrudTest extends TestCase
         $this->assertDatabaseHas('aplikasis', [
             'id' => $aplikasi->id,
             'status' => 'pengembangan',
+            'nama_layanan' => 'Test Layanan Updated',
+            'nama_singkat' => 'TLU',
+            'nama_aplikasi' => 'Test App Updated',
             'kode_unitOrganisasi' => 'UPDATED001',
             'jenis_layanan_aplikasi' => 'pendukung',
         ]);
     }
 
     /**
-     * Test pengelola cannot update locked fields (nama_aplikasi, etc)
+     * Test pengelola cannot update status directly.
      */
-    public function test_pengelola_cannot_update_locked_fields(): void
+    public function test_pengelola_cannot_update_status_directly(): void
     {
         $aplikasi = Aplikasi::factory()->create([
-            'nama_aplikasi' => 'Original Name'
+            'status' => 'pengembangan',
         ]);
 
         $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
             ->putJson("/api/aplikasi/{$aplikasi->id}", [
-                'nama_aplikasi' => 'New Name',
                 'status' => 'diajukan',
             ]);
 
         $response->assertStatus(422);
 
-        // Original name should remain unchanged
         $this->assertDatabaseHas('aplikasis', [
             'id' => $aplikasi->id,
-            'nama_aplikasi' => 'Original Name',
+            'status' => 'pengembangan',
         ]);
     }
 

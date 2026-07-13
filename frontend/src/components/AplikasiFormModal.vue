@@ -67,18 +67,16 @@ function close() {
 
 function nextStep() {
   errors.value = {}
-  if (!form.value.id) {
-    if (!form.value.nama_layanan?.trim()) {
-      errors.value.nama_layanan = 'Nama Layanan wajib diisi'
-    }
-    if (!form.value.nama_singkat?.trim()) {
-      errors.value.nama_singkat = 'Nama Singkat wajib diisi'
-    } else if (form.value.nama_singkat.length > 10) {
-      errors.value.nama_singkat = 'Nama Singkat maksimal 10 karakter'
-    }
-    if (!form.value.nama_aplikasi?.trim()) {
-      errors.value.nama_aplikasi = 'Nama Aplikasi wajib diisi'
-    }
+  if (!form.value.nama_layanan?.trim()) {
+    errors.value.nama_layanan = 'Nama Layanan wajib diisi'
+  }
+  if (!form.value.nama_singkat?.trim()) {
+    errors.value.nama_singkat = 'Nama Singkat wajib diisi'
+  } else if (form.value.nama_singkat.length > 10) {
+    errors.value.nama_singkat = 'Nama Singkat maksimal 10 karakter'
+  }
+  if (!form.value.nama_aplikasi?.trim()) {
+    errors.value.nama_aplikasi = 'Nama Aplikasi wajib diisi'
   }
   
   if (Object.keys(errors.value).length === 0) {
@@ -130,15 +128,12 @@ async function handleSubmit() {
   loading.value = true
   try {
     const fd = new FormData()
+    fd.append('nama_layanan', form.value.nama_layanan)
+    fd.append('nama_singkat', form.value.nama_singkat)
+    fd.append('nama_aplikasi', form.value.nama_aplikasi)
     fd.append('jenis_layanan_aplikasi', form.value.jenis_layanan_aplikasi)
     fd.append('kode_unitOrganisasi', form.value.kode_unitOrganisasi)
     fd.append('tipe_akuisisi', form.value.tipe_akuisisi)
-
-    if (!form.value.id) {
-      fd.append('nama_layanan', form.value.nama_layanan)
-      fd.append('nama_singkat', form.value.nama_singkat)
-      fd.append('nama_aplikasi', form.value.nama_aplikasi)
-    }
 
     let appId = form.value.id
     if (form.value.id) {
@@ -234,8 +229,7 @@ const isNewApp = computed(() => !form.value.id)
               <input
                 type="text"
                 v-model="form.nama_layanan"
-                :disabled="!!form.id"
-                :class="{ 'input-error': errors.nama_layanan, 'input-disabled': !!form.id }"
+                :class="{ 'input-error': errors.nama_layanan }"
                 placeholder="Contoh: Layanan Identitas Digital"
                 minlength="3"
                 maxlength="100"
@@ -248,8 +242,7 @@ const isNewApp = computed(() => !form.value.id)
                 <input
                   type="text"
                   v-model="form.nama_singkat"
-                  :disabled="!!form.id"
-                  :class="{ 'input-error': errors.nama_singkat, 'input-disabled': !!form.id }"
+                  :class="{ 'input-error': errors.nama_singkat }"
                   placeholder="Maks. 10 karakter, contoh: SIDIG"
                   maxlength="10"
                 />
@@ -260,8 +253,7 @@ const isNewApp = computed(() => !form.value.id)
                 <input
                   type="text"
                   v-model="form.nama_aplikasi"
-                  :disabled="!!form.id"
-                  :class="{ 'input-error': errors.nama_aplikasi, 'input-disabled': !!form.id }"
+                  :class="{ 'input-error': errors.nama_aplikasi }"
                   placeholder="Contoh: Sistem Identitas Digital"
                 />
                 <small v-if="errors.nama_aplikasi" class="error-message">{{ errors.nama_aplikasi }}</small>

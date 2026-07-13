@@ -75,10 +75,10 @@ async function loadRfcs(page = 1) {
 
 async function loadProductionApps() {
   try {
-    const response = await http.get('/aplikasi?status=deployed_production&per_page=200')
+    const response = await http.get('/aplikasi?status=deployed_production&per_page=100')
     productionApps.value = (response.data.data || response.data || []).map((app) => ({
       id: app.id,
-      name: app.nama_aplikasi,
+      name: app.nama_aplikasi || app.nama_layanan || app.nama_singkat || `Aplikasi #${app.id}`,
       layanan: app.nama_layanan,
     }))
   } catch (error) {
@@ -102,9 +102,10 @@ async function loadRfcStats() {
   }
 }
 
-function openForm() {
+async function openForm() {
   resetForm()
   showForm.value = true
+  await loadProductionApps()
 }
 
 function resetForm() {

@@ -5,6 +5,9 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
+ * @property string|null $nama_layanan
+ * @property string|null $nama_singkat
+ * @property string|null $nama_aplikasi
  * @property string|null $jenis_layanan_aplikasi
  * @property string|null $kode_unitOrganisasi
  * @property string|null $tipe_akuisisi
@@ -28,12 +31,9 @@ class UpdateAplikasiRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // These fields are locked after creation (cannot be updated)
-            'nama_layanan' => 'prohibited',
-            'nama_singkat' => 'prohibited',
-            'nama_aplikasi' => 'prohibited',
-            
-            // These fields can be updated
+            'nama_layanan' => 'sometimes|required|string|max:255',
+            'nama_singkat' => 'sometimes|required|string|max:10',
+            'nama_aplikasi' => 'sometimes|required|string|max:255',
             'jenis_layanan_aplikasi' => 'sometimes|required|in:publik,internal,pendukung',
             'kode_unitOrganisasi' => 'sometimes|required|string|max:50',
             'tipe_akuisisi' => 'sometimes|required|in:Custom-Made,Off-The-Shelf',
@@ -49,6 +49,9 @@ class UpdateAplikasiRequest extends FormRequest
     public function attributes(): array
     {
         return [
+            'nama_layanan' => 'nama layanan',
+            'nama_singkat' => 'nama singkat',
+            'nama_aplikasi' => 'nama aplikasi',
             'jenis_layanan_aplikasi' => 'jenis layanan aplikasi',
             'kode_unitOrganisasi' => 'kode unit organisasi',
             'tipe_akuisisi' => 'tipe akuisisi',
@@ -62,9 +65,6 @@ class UpdateAplikasiRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'nama_layanan.prohibited' => 'Nama layanan tidak dapat diubah setelah aplikasi dibuat',
-            'nama_singkat.prohibited' => 'Nama singkat tidak dapat diubah setelah aplikasi dibuat',
-            'nama_aplikasi.prohibited' => 'Nama aplikasi tidak dapat diubah setelah aplikasi dibuat',
             'status.prohibited' => 'Status tidak dapat diubah langsung. Silakan gunakan tombol aksi (workflow).',
         ];
     }
