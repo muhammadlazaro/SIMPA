@@ -53,8 +53,7 @@ class AplikasiController extends Controller
                 ->where('status', 'active'),
         ]);
 
-        // Unit kerja melihat pengajuan miliknya sendiri, plus aplikasi UAT lama
-        // yang dibuat non-Unit Kerja dan perlu ditindaklanjuti oleh role Unit Kerja.
+        // Unit kerja hanya melihat pengajuan/aplikasi yang dibuat oleh akun tersebut.
         if ($user && $user->isUnitKerja()) {
             AplikasiAccess::scopeVisibleToUnitKerja($query, $user);
         }

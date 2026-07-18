@@ -353,7 +353,7 @@ class AplikasiCrudTest extends TestCase
         $response->assertJsonCount(1, 'data');
     }
 
-    public function test_unit_kerja_can_see_pengelola_created_uat_application_for_review(): void
+    public function test_unit_kerja_cannot_see_pengelola_created_uat_application_for_review(): void
     {
         $uatApp = Aplikasi::factory()->create([
             'created_by' => $this->pengelolaUser->id,
@@ -369,19 +369,18 @@ class AplikasiCrudTest extends TestCase
 
         $response->assertStatus(200);
         $ids = collect($response->json('data'))->pluck('id');
-        $this->assertContains($uatApp->id, $ids);
+        $this->assertNotContains($uatApp->id, $ids);
         $this->assertNotContains($hiddenDevelopmentApp->id, $ids);
 
         $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
             ->getJson("/api/aplikasi/{$uatApp->id}")
-            ->assertStatus(200)
-            ->assertJsonPath('data.id', $uatApp->id);
+            ->assertStatus(404);
     }
 
     public function test_aplikasi_index_marks_active_uat_document(): void
     {
         $uatApp = Aplikasi::factory()->create([
-            'created_by' => $this->pengelolaUser->id,
+            'created_by' => $this->unitKerjaUser->id,
             'status' => Aplikasi::STATUS_UAT,
         ]);
 

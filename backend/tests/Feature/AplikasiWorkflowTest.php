@@ -80,7 +80,7 @@ class AplikasiWorkflowTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_unit_kerja_can_view_workflow_for_pengelola_created_uat_application(): void
+    public function test_unit_kerja_cannot_view_workflow_for_pengelola_created_uat_application(): void
     {
         $unitKerja = User::factory()->create(['role' => 'unit_kerja']);
         $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
@@ -92,8 +92,7 @@ class AplikasiWorkflowTest extends TestCase
 
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->getJson("/api/aplikasi/{$aplikasi->id}/workflow")
-            ->assertStatus(200)
-            ->assertJsonStructure(['success', 'message', 'data' => ['checklists', 'notes']]);
+            ->assertStatus(403);
     }
 
     public function test_tim_implementasi_can_manage_implementation_checklist(): void

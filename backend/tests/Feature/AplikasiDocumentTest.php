@@ -62,7 +62,7 @@ class AplikasiDocumentTest extends TestCase
         $upload->assertStatus(201);
     }
 
-    public function test_unit_kerja_can_upload_uat_document_for_pengelola_created_uat_app(): void
+    public function test_unit_kerja_cannot_upload_uat_document_for_pengelola_created_uat_app(): void
     {
         Storage::fake('public');
 
@@ -76,17 +76,16 @@ class AplikasiDocumentTest extends TestCase
 
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->getJson("/api/aplikasi/{$app->id}/documents")
-            ->assertStatus(200);
+            ->assertStatus(403);
 
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->post("/api/aplikasi/{$app->id}/documents", [
                 'document_type' => 'uat',
                 'file' => UploadedFile::fake()->create('uat.pdf', 100, self::PDF_MIME_TYPE),
             ])
-            ->assertStatus(201)
-            ->assertJsonPath('data.document.document_type', 'uat');
+            ->assertStatus(403);
 
-        $this->assertDatabaseHas('app_notifications', [
+        $this->assertDatabaseMissing('app_notifications', [
             'user_id' => $pengelola->id,
             'aplikasi_id' => $app->id,
             'type' => 'action_required',
