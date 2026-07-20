@@ -1,16 +1,20 @@
 <script setup>
+import { Button } from '@idds/vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { usePagination } from '../composables/usePagination.js'
 import { useRouter } from 'vue-router'
 import { useToastStore } from '../stores/toast'
 import http from '../lib/http'
-import AnalisLayout from '../layouts/AnalisLayout.vue'
-import DataCardHead from '../components/DataCardHead.vue'
 import DataTable from '../components/DataTable.vue'
 import AnalisaDesainModal from '../components/AnalisaDesainModal.vue'
-import Icons from '../components/Icons.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import AsyncState from '../components/AsyncState.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { warnDev } from '../utils/logger'
-import { getStatusBadgeClass as _getStatusBadgeClass } from '../constants/status'
+import { getShortStatusLabel, getStatusBadgeClass as _getStatusBadgeClass } from '../constants/status'
 
 const toast = useToastStore()
 const router = useRouter()
@@ -18,21 +22,18 @@ const router = useRouter()
 
 const apps = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const searchAplikasi = ref('')
 const hasActiveSearch = computed(() => !!searchAplikasi.value?.trim())
 let filterTimer = null
-// Ringkasan analisa per aplikasi untuk kolom-kolom tabel
-const analisaMap = ref({})
 
 // Pagination state
 const appsPagination = ref({
   currentPage: 1,
   lastPage: 1,
-  perPage: 10,
+  perPage: 30,
   total: 0
 })
-
-const { pageNumbers: appPageNumbers } = usePagination(appsPagination)
 
 const showAnalisaModal = ref(false)
 const analisaAppName = ref('')
@@ -42,16 +43,6 @@ const analisaReadOnly = ref(false)
 const modalFocusSection = ref(null)
 const modalMode = ref('full')
 const hideTransaksi = ref(false)
-
-const uiPlatformLabelMap = {
-  dws: 'DWS',
-  layanan: 'Layanan',
-}
-
-function formatUiPlatformLabel(value) {
-  if (!value) return ''
-  return uiPlatformLabelMap[value] || value
-}
 
 onMounted(async () => {
   await loadAplikasiData()
@@ -63,6 +54,7 @@ onBeforeUnmount(() => {
 
 async function loadAplikasiData(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const searchQuery = searchAplikasi.value?.trim() ? `q=${encodeURIComponent(searchAplikasi.value.trim())}&` : ''
     const statusFilter = `status=${encodeURIComponent('layak,analisa_desain')}&`
@@ -74,17 +66,16 @@ async function loadAplikasiData(page = 1) {
       appsPagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || appsPagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || appsPagination.value.perPage || 30,
         total: Number(meta.total) || 0
       }
     } else {
       apps.value = response.data || []
       appsPagination.value.currentPage = page
     }
-    await loadAnalisaSummaryForPage()
   } catch (error) {
     warnDev('[AnalisDashboard] loadAplikasiData error:', error)
-    toast.push('Gagal memuat data aplikasi', 'error')
+    loadError.value = error.response?.data?.message || 'Antrian analisis belum dapat dimuat.'
   } finally {
     loading.value = false
   }
@@ -102,55 +93,8 @@ function clearSearch() {
   loadAplikasiData(1)
 }
 
-async function loadAnalisaSummaryForPage() {
-  const ids = apps.value.map((a) => a.id)
-  if (ids.length === 0) return
-  const empty = { ui: [], interop: [], storage: [], aktor: [], transaksiCount: 0 }
-  try {
-    const resp = await http.get('/analisa-desain/summary', {
-      params: { aplikasi_ids: ids },
-    })
-    const map = resp.data?.data || {}
-    const next = { ...analisaMap.value }
-    for (const id of ids) {
-      next[id] = map[String(id)] || empty
-    }
-    analisaMap.value = next
-  } catch (e) {
-    warnDev('[AnalisDashboard] loadAnalisaSummary error:', e)
-    const next = { ...analisaMap.value }
-    for (const id of ids) {
-      next[id] = empty
-    }
-    analisaMap.value = next
-  }
-}
-
 function viewDetail(appId) {
   router.push(`/analis-desain/app/${appId}`)
-}
-
-/** Indikator 5 aspek ringkas (selaras kolom tabel) untuk progress analisa */
-function analisaProgress(appId) {
-  const m = analisaMap.value[appId] || {}
-  const labels = ['UI', 'Interop', 'Storage', 'Aktor', 'Transaksi']
-  const ok = [
-    (m.ui || []).length > 0,
-    (m.interop || []).length > 0,
-    (m.storage || []).length > 0,
-    (m.aktor || []).length > 0,
-    (m.transaksiCount || 0) > 0,
-  ]
-  const done = ok.filter(Boolean).length
-  const title = labels.map((l, i) => `${l}: ${ok[i] ? 'sudah' : 'belum'}`).join(' - ')
-  return {
-    done,
-    total: 5,
-    title,
-    badgeClass:
-      done === 5 ? 'badge-success' : done === 0 ? 'badge-secondary' : 'badge-warning',
-    label: done === 5 ? 'Lengkap' : `${done}/5`,
-  }
 }
 
 async function openAnalisaEdit(app) {
@@ -193,191 +137,107 @@ function getStatusBadgeClass(status) {
   return ANALIS_BADGE_OVERRIDE[status] ?? _getStatusBadgeClass(status, 'badge-secondary')
 }
 
+function statusToneClass(status) {
+  const badgeClass = getStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
+}
+
 function onAnalisaSaved() {
   loadAplikasiData(appsPagination.value.currentPage)
 }
 </script>
 
 <template>
-  <AnalisLayout>
-    <div class="container workspace-dashboard">
-      <div class="workspace-hero-card">
-        <div class="workspace-hero-text">
-          <nav class="workspace-hero-breadcrumb" aria-label="breadcrumb">
-            <button @click="router.push('/analis-desain')" class="ah-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="ah-bc-sep">/</span>
-            <span class="ah-bc-current">Analisa &amp; Desain</span>
-          </nav>
-          <h2 class="workspace-hero-title">Analisa &amp; Desain</h2>
-          <p class="workspace-hero-sub">Pantau dan lengkapi hasil analisa desain aplikasi.</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Analis Desain"
+      title="Antrian analisis"
+      description="Tinjau aplikasi yang telah dinyatakan layak dan lengkapi rancangan teknisnya."
+    />
 
-    <!-- Aplikasi Section -->
-    <div class="content-section active">
-      <div class="card">
-        <DataCardHead title="Daftar Aplikasi">
-          <template #actions>
-            <div class="search-group">
-              <span class="search-icon">
-                <Icons name="search" :size="16" />
-              </span>
-              <input 
-                type="text" 
-                v-model="searchAplikasi" 
-                @input="scheduleFilterUpdate" 
-                placeholder="Cari aplikasi..."
-                maxlength="50" 
-                aria-label="Cari aplikasi..."
-              />
-            </div>
+    <div class="ui-page-content">
+      <section class="ui-panel" aria-labelledby="analysis-list-title">
+        <header class="ui-panel-header">
+          <div>
+            <h2 id="analysis-list-title">Aplikasi siap dianalisis</h2>
+            <p class="ui-table-subtitle">{{ appsPagination.total }} aplikasi dalam antrian</p>
+          </div>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="searchAplikasi"
+              label="Cari aplikasi"
+              placeholder="Cari aplikasi"
+              @update:model-value="scheduleFilterUpdate"
+            />
+          </div>
+        </header>
+        
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="apps.length === 0"
+          :empty-icon="hasActiveSearch ? 'search' : 'inbox'"
+          :empty-title="hasActiveSearch ? 'Aplikasi tidak ditemukan' : 'Antrian analisis kosong'"
+          :empty-description="hasActiveSearch
+            ? 'Coba kata kunci lain atau hapus pencarian.'
+            : 'Belum ada aplikasi yang siap masuk tahap analisis desain.'"
+          @retry="loadAplikasiData(appsPagination.currentPage)"
+        >
+          <template v-if="hasActiveSearch" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearSearch">
+              Hapus pencarian
+            </Button>
           </template>
-        </DataCardHead>
-        
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p>Memuat data aplikasi...</p>
-        </div>
-        <div v-else-if="apps.length === 0 && hasActiveSearch" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="search" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Tidak Ada Hasil</h3>
-          <p class="global-empty-text">
-            Tidak ada aplikasi tahap analisa yang cocok dengan kata kunci ini.
-          </p>
-          <button type="button" class="btn btn-secondary" @click="clearSearch">
-            Hapus pencarian
-          </button>
-        </div>
-        <div v-else-if="apps.length === 0" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="inbox" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Tidak Ada Aplikasi</h3>
-          <p class="global-empty-text">
-            Tidak ada aplikasi di tahap Analisa dan Desain saat ini.
-          </p>
-          <button class="btn btn-secondary" @click="loadAplikasiData(1)">
-            <Icons name="refresh-cw" :size="16" />
-            Muat ulang
-          </button>
-        </div>
-        <div v-else>
-        <DataTable>
-          <thead>
-            <tr>
-              <th scope="col" class="col-num">#</th>
-              <th scope="col">Nama Aplikasi</th>
-              <th scope="col">UI Platform</th>
-              <th scope="col">Interoperabilitas</th>
-              <th scope="col">Storage</th>
-              <th scope="col">Aktor</th>
-              <th scope="col">Transaksi</th>
-              <th scope="col" class="col-aksi">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(app, idx) in apps" :key="app.id" class="data-table-row is-clickable" @click="viewDetail(app.id)">
-              <td class="col-num">{{ rowNumber(idx) }}</td>
-              <td>
-                <div class="app-name-cell">
-                  <span class="app-name-main">{{ app.nama_aplikasi || '-' }}</span>
-                  <span class="app-name-sub">{{ app.nama_layanan || '-' }}</span>
-                </div>
-              </td>
-              
-              <td>
-                <div class="table-badges">
-                  <span v-for="p in (analisaMap[app.id]?.ui || [])" :key="'ui-'+p" class="badge badge-info">{{ formatUiPlatformLabel(p) }}</span>
-                  <span v-if="!(analisaMap[app.id]?.ui || []).length" class="table-empty-pill">Belum ada</span>
-                </div>
-              </td>
-              <td>
-                <div class="table-badges">
-                  <span v-for="v in (analisaMap[app.id]?.interop || [])" :key="'io-'+v" class="badge badge-success">{{ v }}</span>
-                  <span v-if="!(analisaMap[app.id]?.interop || []).length" class="table-empty-pill">Belum ada</span>
-                </div>
-              </td>
-              <td>
-                <div class="table-badges">
-                  <span v-for="s in (analisaMap[app.id]?.storage || [])" :key="'st-'+s" class="badge badge-warning">{{ s==='db'?'Database': s==='object-storage'?'Object Storage': s }}</span>
-                  <span v-if="!(analisaMap[app.id]?.storage || []).length" class="table-empty-pill">Belum ada</span>
-                </div>
-              </td>
-              <td>
-                <div class="table-badges">
-                  <span v-for="ak in (analisaMap[app.id]?.aktor || [])" :key="'ak-'+ak" class="badge badge-info">{{ ak }}</span>
-                  <span v-if="!(analisaMap[app.id]?.aktor || []).length" class="table-empty-pill">Belum ada</span>
-                </div>
-              </td>
-              <td>
-                <div class="table-badges">
-                  <span class="badge">{{ analisaMap[app.id]?.transaksiCount || 0 }} endpoint</span>
-                </div>
-              </td>
-              <td class="action-cell" @click.stop>
-                <div class="action-group">
-                  <button
-                    type="button"
-                    class="action-btn table-action-btn view-btn"
-                    title="Buka halaman lengkap: tab proyek, ringkasan aplikasi, dan konfigurasi turunan"
-                    @click.stop="viewDetail(app.id)"
+
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col" class="col-num">#</th>
+                <th scope="col">Nama aplikasi</th>
+                <th scope="col">Kode unit</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(app, idx) in apps" :key="app.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <RouterLink
+                    class="ui-table-link"
+                    :to="{ name: 'analis-desain-app-detail', params: { id: app.id } }"
                   >
-                    <Icons name="eye" :size="14" />
-                    Detail
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn table-action-btn edit-btn"
-                    title="Buka formulir analisa di jendela untuk mengubah UI, interop, penyimpanan, aktor, dan transaksi"
-                    @click.stop="openAnalisaEdit(app)"
-                  >
-                    <Icons name="edit" :size="14" />
-                    Edit
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </DataTable>
-        </div>
-        
-        <!-- Pagination Controls -->
-        <div v-if="appsPagination.lastPage > 1" class="pagination">
-          <div class="pagination-info">
-            Menampilkan {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + 1 }} - 
-            {{ Math.min(appsPagination.currentPage * appsPagination.perPage, appsPagination.total) }} 
-            dari {{ appsPagination.total }} data
-          </div>
-          <div class="pagination-controls">
-            <button 
-              @click="changePage(appsPagination.currentPage - 1)" 
-              :disabled="appsPagination.currentPage === 1"
-              class="pagination-btn">
-              <Icons name="chevron-left" :size="16" />
-            </button>
-            
-            <button 
-              v-for="page in appPageNumbers" 
-              :key="page"
-              @click="page !== '...' && changePage(page)"
-              :class="['pagination-btn', { active: page === appsPagination.currentPage, disabled: page === '...' }]">
-              {{ page }}
-            </button>
-            
-            <button 
-              @click="changePage(appsPagination.currentPage + 1)" 
-              :disabled="appsPagination.currentPage === appsPagination.lastPage"
-              class="pagination-btn">
-              <Icons name="chevron-right" :size="16" />
-            </button>
-          </div>
-        </div>
-      </div>
+                    {{ app.nama_aplikasi || '-' }}
+                  </RouterLink>
+                  <span class="ui-table-subtitle">{{ app.nama_layanan || '-' }}</span>
+                </td>
+                <td data-label="Kode unit">{{ app.kode_unitOrganisasi || '-' }}</td>
+                <td data-label="Status">
+                  <StatusBadge :tone="statusToneClass(app.status)">
+                    {{ getShortStatusLabel(app.status) }}
+                  </StatusBadge>
+                </td>
+                <td class="ui-table-actions">
+                  <IconActionCell :label="`Aksi untuk ${app.nama_aplikasi}`">
+                    <IconActionButton label="Lihat detail" icon="eye" @click="viewDetail(app.id)" />
+                    <IconActionButton label="Edit analisis" icon="edit" @click="openAnalisaEdit(app)" />
+                  </IconActionCell>
+                </td>
+              </tr>
+            </tbody>
+          </DataTable>
+        </AsyncState>
+
+        <PaginationBar
+          :page="appsPagination.currentPage"
+          :last-page="appsPagination.lastPage"
+          :total="appsPagination.total"
+          @change="changePage"
+        />
+      </section>
     </div>
 
     <AnalisaDesainModal
@@ -392,26 +252,10 @@ function onAnalisaSaved() {
       @close="showAnalisaModal = false"
       @saved="onAnalisaSaved"
     />
-    </div>
-  </AnalisLayout>
+  </div>
 </template>
 
 <style scoped>
-.table-badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-
-.table-empty-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--notion-muted-surface);
-  color: var(--notion-text-secondary);
-  border: 1px dashed var(--notion-border);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .app-name-cell {
   display: flex;
   flex-direction: column;
@@ -419,29 +263,20 @@ function onAnalisaSaved() {
 }
 
 .app-name-main {
-  color: var(--notion-text);
-  font-size: 14px;
-  font-weight: 700;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-sub {
-  color: var(--notion-text-secondary);
-  font-size: 12px;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .action-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-.progress-badge { cursor: help; font-weight: 600; }
-
-.action-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-start;
+  white-space: nowrap;
 }
 
 .workspace-hero-card {
@@ -450,8 +285,8 @@ function onAnalisaSaved() {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 20px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -462,7 +297,8 @@ function onAnalisaSaved() {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link {
@@ -471,29 +307,31 @@ function onAnalisaSaved() {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link:hover { color: rgba(255, 255, 255, 0.9); }
 .ah-bc-sep { color: rgba(255, 255, 255, 0.35); }
-.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: var(--idds-weight-medium); }
 
 .workspace-hero-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .workspace-hero-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.7);
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 
 @media (max-width: 768px) {

@@ -1,10 +1,20 @@
 <script setup>
+import {
+  Button,
+  Modal,
+  SingleFileUpload,
+  Stepper,
+  TextField,
+} from '@idds/vue'
+import { IconArrowLeft, IconArrowRight, IconCheck, IconDownload } from '@tabler/icons-vue'
 import { ref, watch, computed } from 'vue'
 import http from '../lib/http'
 import { useToastStore } from '../stores/toast'
 import { formatDate, formatRelativeTime } from '../utils/dateHelper'
+import { resolveIddsFileSelection } from '../utils/fileUpload'
 import { warnDev } from '../utils/logger'
 import Icons from './Icons.vue'
+import IddsSelect from './IddsSelect.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -31,18 +41,51 @@ const form = ref({ ...EMPTY_FORM })
 // Step 3: file state
 const formulirFile = ref(null)
 const uploadingDoc = ref(false)
-const formulirInput = ref(null)
+function onFormulirFileChange(file, validation) {
+  const selection = resolveIddsFileSelection(file, validation)
+  formulirFile.value = selection.file
 
-function onFormuliFileChange(e) {
-  formulirFile.value = e.target.files[0] || null
+  if (selection.error) {
+    toast.push(selection.error, 'error')
+  }
 }
 
 function removeFormuliFile() {
   formulirFile.value = null
-  if (formulirInput.value) formulirInput.value.value = ''
+}
+
+function openFormTemplate() {
+  window.open(
+    '/templates/P22-Formulir-Usulan-Pengembangan-Aplikasi.pdf',
+    '_blank',
+    'noopener,noreferrer',
+  )
 }
 
 const step = ref(1)
+const stepItems = computed(() => [
+  { label: 'Identitas layanan' },
+  { label: 'Detail teknis' },
+  ...(!form.value.id ? [{ label: 'Formulir pengajuan' }] : []),
+])
+
+const errorSteps = computed(() => {
+  const items = []
+  if (errors.value.nama_layanan || errors.value.nama_singkat || errors.value.nama_aplikasi) items.push(0)
+  if (errors.value.jenis_layanan_aplikasi || errors.value.kode_unitOrganisasi || errors.value.tipe_akuisisi) items.push(1)
+  return items
+})
+
+const jenisLayananOptions = [
+  { label: 'Publik', value: 'publik' },
+  { label: 'Internal', value: 'internal' },
+  { label: 'Pendukung', value: 'pendukung' },
+]
+
+const tipeAkuisisiOptions = [
+  { label: 'Custom-Made', value: 'Custom-Made' },
+  { label: 'Off-The-Shelf', value: 'Off-The-Shelf' },
+]
 
 watch(() => props.app, (val) => {
   form.value = val ? { ...val } : { ...EMPTY_FORM }
@@ -179,122 +222,114 @@ async function handleSubmit() {
   }
 }
 
-// Computed label untuk tombol submit
-const isNewApp = computed(() => !form.value.id)
 </script>
 
 <template>
-  <div v-if="show" class="modal active" role="dialog" aria-modal="true" aria-labelledby="modal-title-aplikasi">
-    <div class="modal-content app-form-modal">
-      <div class="modal-header">
-        <h3 :id="`modal-title-aplikasi`">{{ form.id ? 'Edit Aplikasi' : 'Tambah Aplikasi Baru' }}</h3>
-        <button class="close-btn" @click="close" aria-label="Tutup modal">&times;</button>
-      </div>
-
-      <!-- Stepper: 3 step untuk new, 2 step untuk edit -->
-      <div class="wizard-stepper">
-        <!-- Step 1 -->
-        <div class="step-item" :class="{ 'active': step >= 1, 'completed': step > 1 }">
-          <div class="step-number">
-            <Icons v-if="step > 1" name="check" :size="12" />
-            <span v-else>1</span>
-          </div>
-          <div class="step-label">Identitas Layanan</div>
-        </div>
-        <div class="step-line" :class="{ 'active': step > 1 }"></div>
-        <!-- Step 2 -->
-        <div class="step-item" :class="{ 'active': step === 2, 'completed': step > 2 }">
-          <div class="step-number">
-            <Icons v-if="step > 2" name="check" :size="12" />
-            <span v-else>2</span>
-          </div>
-          <div class="step-label">Detail Teknis</div>
-        </div>
-        <!-- Step 3 hanya untuk new app -->
-        <template v-if="isNewApp">
-          <div class="step-line" :class="{ 'active': step > 2 }"></div>
-          <div class="step-item" :class="{ 'active': step === 3 }">
-            <div class="step-number">3</div>
-            <div class="step-label">Formulir Pengajuan</div>
-          </div>
-        </template>
-      </div>
+  <Modal
+    :model-value="show"
+    :title="form.id ? 'Edit aplikasi' : 'Tambah aplikasi baru'"
+    :description="form.id ? 'Perbarui identitas dan detail teknis aplikasi.' : 'Lengkapi data aplikasi dalam tiga tahap.'"
+    size="lg"
+    :show-close-button="true"
+    :show-footer="false"
+    close-label="Tutup formulir aplikasi"
+    :close-on-backdrop="!loading && !uploadingDoc"
+    :close-on-escape="!loading && !uploadingDoc"
+    :persistent="loading || uploadingDoc"
+    padding-body="24px"
+    @update:model-value="($event) => { if (!$event) close() }"
+  >
+    <div class="app-form-modal">
+      <Stepper
+        class="application-stepper"
+        :steps="stepItems"
+        :current-step="step - 1"
+        :error-steps="errorSteps"
+        orientation="horizontal"
+        tabindex="0"
+        aria-label="Tahapan formulir aplikasi"
+      />
 
       <form @submit.prevent>
         <transition name="fade-slide" mode="out-in">
           <!-- STEP 1: Identitas Layanan -->
           <div v-if="step === 1" class="wizard-step" key="step1">
-            <div class="form-group">
-              <label>Nama Layanan <span class="required-mark">*</span></label>
-              <input
-                type="text"
-                v-model="form.nama_layanan"
-                :class="{ 'input-error': errors.nama_layanan }"
-                placeholder="Contoh: Layanan Identitas Digital"
-                minlength="3"
-                maxlength="100"
-              />
-              <small v-if="errors.nama_layanan" class="error-message">{{ errors.nama_layanan }}</small>
-            </div>
+            <TextField
+              v-model="form.nama_layanan"
+              label="Nama layanan"
+              placeholder="Contoh: Layanan Identitas Digital"
+              size="lg"
+              :required="true"
+              :max-length="100"
+              :status="errors.nama_layanan ? 'error' : 'neutral'"
+              :status-message="errors.nama_layanan || ''"
+            />
             <div class="form-row">
-              <div class="form-group">
-                <label>Nama Singkat <span class="required-mark">*</span></label>
-                <input
-                  type="text"
-                  v-model="form.nama_singkat"
-                  :class="{ 'input-error': errors.nama_singkat }"
-                  placeholder="Maks. 10 karakter, contoh: SIDIG"
-                  maxlength="10"
-                />
-                <small v-if="errors.nama_singkat" class="error-message">{{ errors.nama_singkat }}</small>
-              </div>
-              <div class="form-group">
-                <label>Nama Aplikasi <span class="required-mark">*</span></label>
-                <input
-                  type="text"
-                  v-model="form.nama_aplikasi"
-                  :class="{ 'input-error': errors.nama_aplikasi }"
-                  placeholder="Contoh: Sistem Identitas Digital"
-                />
-                <small v-if="errors.nama_aplikasi" class="error-message">{{ errors.nama_aplikasi }}</small>
-              </div>
+              <TextField
+                v-model="form.nama_singkat"
+                label="Nama singkat"
+                helper-text="Maksimal 10 karakter."
+                placeholder="Contoh: SIDIG"
+                size="lg"
+                :required="true"
+                :max-length="10"
+                :show-char-count="true"
+                :status="errors.nama_singkat ? 'error' : 'neutral'"
+                :status-message="errors.nama_singkat || ''"
+              />
+              <TextField
+                v-model="form.nama_aplikasi"
+                label="Nama aplikasi"
+                placeholder="Contoh: Sistem Identitas Digital"
+                size="lg"
+                :required="true"
+                :max-length="255"
+                :status="errors.nama_aplikasi ? 'error' : 'neutral'"
+                :status-message="errors.nama_aplikasi || ''"
+              />
             </div>
           </div>
 
           <!-- STEP 2: Detail Teknis -->
           <div v-else-if="step === 2" class="wizard-step" key="step2">
             <div class="form-row">
-              <div class="form-group">
-                <label>Jenis Layanan Aplikasi <span class="required-mark">*</span></label>
-                <select v-model="form.jenis_layanan_aplikasi" :class="{ 'input-error': errors.jenis_layanan_aplikasi }">
-                  <option value="" disabled selected>-- Pilih Jenis --</option>
-                  <option value="publik">Publik</option>
-                  <option value="internal">Internal</option>
-                  <option value="pendukung">Pendukung</option>
-                </select>
-                <small v-if="errors.jenis_layanan_aplikasi" class="error-message">{{ errors.jenis_layanan_aplikasi }}</small>
-              </div>
-              <div class="form-group">
-                <label>Kode Unit Organisasi <span class="required-mark">*</span></label>
-                <input
-                  type="text"
-                  v-model="form.kode_unitOrganisasi"
-                  :class="{ 'input-error': errors.kode_unitOrganisasi }"
-                  placeholder="Contoh: BSSN-01"
-                />
-                <small v-if="errors.kode_unitOrganisasi" class="error-message">{{ errors.kode_unitOrganisasi }}</small>
-              </div>
+              <IddsSelect
+                v-model="form.jenis_layanan_aplikasi"
+                label="Jenis layanan aplikasi"
+                :options="jenisLayananOptions"
+                placeholder="Pilih jenis layanan"
+                size="lg"
+                width="100%"
+                panel-width="100%"
+                :required="true"
+                :status="errors.jenis_layanan_aplikasi ? 'error' : 'neutral'"
+                :status-message="errors.jenis_layanan_aplikasi || ''"
+              />
+              <TextField
+                v-model="form.kode_unitOrganisasi"
+                label="Kode unit organisasi"
+                placeholder="Contoh: BSSN-01"
+                size="lg"
+                :required="true"
+                :max-length="255"
+                :status="errors.kode_unitOrganisasi ? 'error' : 'neutral'"
+                :status-message="errors.kode_unitOrganisasi || ''"
+              />
             </div>
             <div class="form-row">
-              <div class="form-group form-group-wide">
-                <label>Tipe Akuisisi <span class="required-mark">*</span></label>
-                <select v-model="form.tipe_akuisisi" :class="{ 'input-error': errors.tipe_akuisisi }">
-                  <option value="" disabled selected>-- Pilih Tipe --</option>
-                  <option value="Custom-Made">Custom-Made</option>
-                  <option value="Off-The-Shelf">Off-The-Shelf</option>
-                </select>
-                <small v-if="errors.tipe_akuisisi" class="error-message">{{ errors.tipe_akuisisi }}</small>
-              </div>
+              <IddsSelect
+                v-model="form.tipe_akuisisi"
+                class="form-group-wide"
+                label="Tipe akuisisi"
+                :options="tipeAkuisisiOptions"
+                placeholder="Pilih tipe akuisisi"
+                size="lg"
+                width="100%"
+                panel-width="100%"
+                :required="true"
+                :status="errors.tipe_akuisisi ? 'error' : 'neutral'"
+                :status-message="errors.tipe_akuisisi || ''"
+              />
             </div>
           </div>
 
@@ -302,71 +337,41 @@ const isNewApp = computed(() => !form.value.id)
           <div v-else-if="step === 3" class="wizard-step" key="step3">
             <div class="step3-header">
               <div class="step3-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="12" y1="11" x2="12" y2="17"/>
-                  <line x1="9" y1="14" x2="15" y2="14"/>
-                </svg>
+                <Icons name="file-text" :size="28" />
               </div>
               <div>
-                <h4 class="step3-title">Upload Formulir Pengajuan</h4>
+                <h4 class="step3-title">Unggah formulir pengajuan</h4>
                 <p class="step3-desc">Unggah formulir pengajuan resmi (PDF / DOC). Dokumen ini <strong>wajib diunggah</strong> sebagai syarat pengajuan aplikasi baru.</p>
               </div>
             </div>
 
             <!-- Template download -->
             <div class="step3-template-row">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              <a
-                href="/templates/P22-Formulir-Usulan-Pengembangan-Aplikasi.pdf"
-                class="step3-template-link"
-                target="_blank"
-                rel="noopener"
-              >Buka template formulir pengajuan</a>
+              <Button
+                hierarchy="link"
+                size="md"
+                :prefix-icon="IconDownload"
+                @click="openFormTemplate"
+              >
+                Buka template formulir pengajuan
+              </Button>
             </div>
 
-            <!-- File picker -->
-            <div class="step3-upload-area" :class="{ 'has-file': !!formulirFile }">
-              <template v-if="!formulirFile">
-                <label class="step3-upload-label" for="formulir-input">
-                  <svg class="step3-upload-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  <span class="step3-upload-text">Klik untuk memilih file</span>
-                  <span class="step3-upload-hint">PDF, DOC, atau DOCX - maks. 10 MB</span>
-                  <input
-                    id="formulir-input"
-                    ref="formulirInput"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    class="step3-file-input"
-                    @change="onFormuliFileChange"
-                  />
-                </label>
-              </template>
-              <template v-else>
-                <div class="step3-file-preview">
-                  <div class="step3-file-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                  </div>
-                  <div class="step3-file-info">
-                    <span class="step3-file-name">{{ formulirFile.name }}</span>
-                    <span class="step3-file-size">{{ (formulirFile.size / 1024).toFixed(1) }} KB</span>
-                  </div>
-                  <button type="button" class="step3-remove-btn" @click="removeFormuliFile" title="Hapus file">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
-                </div>
-              </template>
-            </div>
+            <SingleFileUpload
+              title="Pilih formulir pengajuan"
+              description="PDF, DOC, atau DOCX; maksimal 10 MB."
+              accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              :allowed-extensions="['pdf', 'doc', 'docx']"
+              :max-size="10 * 1024 * 1024"
+              :validate-magic-number="true"
+              :disabled="loading || uploadingDoc"
+              :status="uploadingDoc ? 'uploading' : (formulirFile ? 'success' : 'idle')"
+              @change="onFormulirFileChange"
+              @remove="removeFormuliFile"
+            />
 
             <p class="step3-required-note">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <Icons name="alert-circle" :size="13" />
               Formulir pengajuan wajib diunggah sebelum pengajuan dapat diproses oleh Pengelola Aplikasi.
             </p>
           </div>
@@ -374,36 +379,53 @@ const isNewApp = computed(() => !form.value.id)
 
         <!-- Navigation Buttons -->
         <div class="modal-actions">
-          <!-- Step 1 -->
           <template v-if="step === 1">
-            <button type="button" class="btn btn-cancel" @click="close">Batal</button>
-            <button type="button" class="btn btn-submit" @click="nextStep">Lanjut &rarr;</button>
+            <Button hierarchy="secondary" size="lg" type="button" @click="close">Batal</Button>
+            <Button hierarchy="primary" size="lg" type="button" :suffix-icon="IconArrowRight" @click="nextStep">
+              Lanjut
+            </Button>
           </template>
-          <!-- Step 2 -->
           <template v-else-if="step === 2">
-            <button type="button" class="btn btn-cancel" :disabled="loading" @click="step = 1">&larr; Kembali</button>
-            <!-- Edit mode: langsung Simpan. New mode: lanjut ke step 3 -->
-            <button v-if="form.id" type="button" class="btn btn-submit" :disabled="loading" @click="nextStep2">
-              <span v-if="loading">Menyimpan...</span>
-              <span v-else>Simpan</span>
-            </button>
-            <button v-else type="button" class="btn btn-submit" :disabled="loading" @click="nextStep2">
-              Lanjut &rarr;
-            </button>
+            <Button hierarchy="secondary" size="lg" type="button" :prefix-icon="IconArrowLeft" :disabled="loading" @click="step = 1">
+              Kembali
+            </Button>
+            <Button
+              v-if="form.id"
+              hierarchy="primary"
+              size="lg"
+              type="button"
+              :disabled="loading"
+              :prefix-icon="IconCheck"
+              @click="nextStep2"
+            >
+              {{ loading ? 'Menyimpan' : 'Simpan perubahan' }}
+            </Button>
+            <Button
+              v-else
+              hierarchy="primary"
+              size="lg"
+              type="button"
+              :suffix-icon="IconArrowRight"
+              :disabled="loading"
+              @click="nextStep2"
+            >
+              Lanjut
+            </Button>
           </template>
-          <!-- Step 3 (new app only) -->
           <template v-else-if="step === 3">
-            <button type="button" class="btn btn-cancel" :disabled="loading || uploadingDoc" @click="step = 2">&larr; Kembali</button>
-            <button type="button" class="btn btn-submit" :disabled="loading || uploadingDoc || !formulirFile" @click="handleSubmit">
-              <span v-if="loading || uploadingDoc">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin spin-inline"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                {{ uploadingDoc ? 'Mengunggah...' : 'Mengajukan...' }}
-              </span>
-              <span v-else>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="submit-icon"><polyline points="20 6 9 17 4 12"/></svg>
-                Ajukan
-              </span>
-            </button>
+            <Button hierarchy="secondary" size="lg" type="button" :prefix-icon="IconArrowLeft" :disabled="loading || uploadingDoc" @click="step = 2">
+              Kembali
+            </Button>
+            <Button
+              hierarchy="primary"
+              size="lg"
+              type="button"
+              :prefix-icon="IconCheck"
+              :disabled="loading || uploadingDoc || !formulirFile"
+              @click="handleSubmit"
+            >
+              {{ uploadingDoc ? 'Mengunggah formulir' : (loading ? 'Mengirim pengajuan' : 'Ajukan aplikasi') }}
+            </Button>
           </template>
         </div>
       </form>
@@ -430,28 +452,42 @@ const isNewApp = computed(() => !form.value.id)
         </div>
       </div>
     </div>
-  </div>
+  </Modal>
 </template>
 
 <style scoped>
 .app-form-modal {
-  width: min(760px, calc(100vw - 32px));
-  max-width: 760px;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
+  display: grid;
+  gap: var(--ina-spacing-5);
+}
+
+.application-stepper {
+  margin-bottom: var(--ina-spacing-2);
+}
+
+.application-stepper:focus-visible {
+  outline: 2px solid var(--ina-primary-primary);
+  outline-offset: 4px;
+}
+
+.application-stepper :deep(.ina-stepper__label),
+.app-form-modal :deep(.ina-text-field__char-count) {
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .required-mark {
-  color: var(--notion-red);
-  font-weight: 800;
+  color: var(--ina-negative-600);
+  font-weight: var(--idds-weight-bold);
 }
 
 .field-help {
   display: block;
   margin-top: 4px;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .modal-actions {
@@ -460,10 +496,18 @@ const isNewApp = computed(() => !form.value.id)
   margin-top: 24px;
 }
 
-.modal-actions .btn {
+.modal-actions :deep(.ina-button) {
   margin-top: 0;
   flex: 1;
   justify-content: center;
+}
+
+.modal-actions :deep(.ina-button--primary) {
+  background-color: var(--ina-primary-600);
+}
+
+.modal-actions :deep(.ina-button--primary:hover) {
+  background-color: var(--ina-primary-700);
 }
 
 /* Stepper UI */
@@ -479,31 +523,32 @@ const isNewApp = computed(() => !form.value.id)
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--notion-text-tertiary);
+  color: var(--ina-content-tertiary);
   transition: all 0.3s ease;
 }
 
-.step-item.active { color: var(--notion-text); }
+.step-item.active { color: var(--ina-content-primary); }
 .step-item.completed { color: #10b981; }
 
 .step-number {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--notion-bg-secondary);
-  border: 1px solid var(--notion-border);
+  background: var(--ina-background-secondary);
+  border: 1px solid var(--ina-stroke-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   transition: all 0.3s ease;
+  line-height: var(--idds-caption-line);
 }
 
 .step-item.active .step-number {
-  background: var(--notion-blue);
+  background: var(--ina-primary-primary);
   color: white;
-  border-color: var(--notion-blue);
+  border-color: var(--ina-primary-primary);
 }
 
 .step-item.completed .step-number {
@@ -512,12 +557,12 @@ const isNewApp = computed(() => !form.value.id)
   border-color: #10b981;
 }
 
-.step-label { font-size: 13px; font-weight: 600; }
+.step-label { font-size: var(--idds-caption-size); font-weight: var(--idds-weight-semibold); line-height: var(--idds-caption-line); }
 
 .step-line {
   flex: 1;
   height: 2px;
-  background: var(--notion-border);
+  background: var(--ina-stroke-primary);
   margin: 0 16px;
   border-radius: 2px;
   transition: all 0.3s ease;
@@ -540,8 +585,8 @@ const isNewApp = computed(() => !form.value.id)
 
 .btn-cancel {
   background: rgba(55, 53, 47, 0.07);
-  color: var(--notion-text);
-  border: 1px solid var(--notion-border);
+  color: var(--ina-content-primary);
+  border: 1px solid var(--ina-stroke-primary);
 }
 
 .btn-cancel:hover:not(:disabled) {
@@ -551,18 +596,19 @@ const isNewApp = computed(() => !form.value.id)
 .btn-skip {
   flex: 1;
   background: transparent;
-  color: var(--notion-text-secondary);
-  border: 1px solid var(--notion-border);
+  color: var(--ina-content-secondary);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
   padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-medium);
   cursor: pointer;
   transition: all 0.2s;
+  line-height: var(--idds-caption-line);
 }
 .btn-skip:hover:not(:disabled) {
-  background: var(--notion-hover);
-  color: var(--notion-text);
+  background: var(--ina-background-tertiary);
+  color: var(--ina-content-primary);
 }
 .btn-skip:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -575,14 +621,14 @@ const isNewApp = computed(() => !form.value.id)
 }
 
 .input-error {
-  border-color: var(--notion-red) !important;
-  background-color: var(--notion-red-bg) !important;
+  border-color: var(--ina-negative-600) !important;
+  background-color: var(--ina-negative-50) !important;
 }
 
 .input-disabled {
-  background-color: var(--notion-muted-surface) !important;
+  background-color: var(--ina-background-secondary) !important;
   cursor: not-allowed !important;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .char-counter-row {
@@ -594,29 +640,31 @@ const isNewApp = computed(() => !form.value.id)
 }
 
 .char-counter {
-  font-size: 11px;
-  color: var(--notion-text-tertiary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-tertiary);
   margin-left: auto;
   transition: color 0.2s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .char-counter--warn {
   color: #c05c00;
-  font-weight: 600;
+  font-weight: var(--idds-weight-semibold);
 }
 
 .error-message {
   display: block;
-  color: var(--notion-red);
-  font-size: 12px;
+  color: var(--ina-negative-600);
+  font-size: var(--idds-caption-small-size);
   margin-top: 4px;
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-small-line);
 }
 
 .modal-footer {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--notion-border);
+  border-top: 1px solid var(--ina-stroke-primary);
 }
 
 .timestamp-info {
@@ -628,26 +676,26 @@ const isNewApp = computed(() => !form.value.id)
 .timestamp-item {
   display: flex;
   gap: 8px;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .timestamp-label {
-  color: var(--notion-text-secondary);
-  font-weight: 500;
+  color: var(--ina-content-secondary);
+  font-weight: var(--idds-weight-medium);
   min-width: 70px;
 }
 
 .timestamp-value {
-  color: var(--notion-text);
+  color: var(--ina-content-primary);
   cursor: default;
   border-bottom: 1px dotted rgba(55, 53, 47, 0.3);
   transition: all 0.15s ease;
 }
 
 .timestamp-value:hover {
-  color: var(--notion-blue);
-  border-bottom-color: var(--notion-blue);
+  color: var(--ina-primary-primary);
+  border-bottom-color: var(--ina-primary-primary);
 }
 
 :deep(.modal-content) { position: relative; }
@@ -665,26 +713,27 @@ const isNewApp = computed(() => !form.value.id)
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: var(--notion-blue-bg, #eff6ff);
+  background: var(--ina-primary-50, #eff6ff);
   border: 1px solid rgba(59, 130, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--notion-blue, #2563eb);
+  color: var(--ina-primary-primary, #2563eb);
 }
 
 .step3-title {
   margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--notion-text);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-body-small-line);
 }
 
 .step3-desc {
   margin: 0;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  line-height: 1.6;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 
 .step3-template-row {
@@ -692,28 +741,29 @@ const isNewApp = computed(() => !form.value.id)
   align-items: center;
   gap: 6px;
   margin-bottom: 16px;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .step3-template-link {
-  font-size: 13px;
-  color: var(--notion-blue);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-primary-primary);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 .step3-template-link:hover { text-decoration: underline; }
 
 .step3-upload-area {
-  border: 2px dashed var(--notion-border);
+  border: 2px dashed var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   transition: border-color 0.2s, background 0.2s;
   margin-bottom: 14px;
 }
 
 .step3-upload-area:hover {
-  border-color: var(--notion-blue);
-  background: var(--notion-blue-bg, #eff6ff);
+  border-color: var(--ina-primary-primary);
+  background: var(--ina-primary-50, #eff6ff);
 }
 
 .step3-upload-area.has-file {
@@ -734,14 +784,16 @@ const isNewApp = computed(() => !form.value.id)
 }
 
 .step3-upload-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--notion-text);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .step3-upload-hint {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .step3-upload-icon {
@@ -784,19 +836,21 @@ const isNewApp = computed(() => !form.value.id)
 
 .step3-file-name {
   display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--notion-text);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  color: var(--ina-content-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: var(--idds-caption-line);
 }
 
 .step3-file-size {
   display: block;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
   margin-top: 2px;
+  line-height: var(--idds-caption-small-line);
 }
 
 .step3-remove-btn {
@@ -806,7 +860,7 @@ const isNewApp = computed(() => !form.value.id)
   border-radius: 6px;
   padding: 4px;
   cursor: pointer;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -822,14 +876,14 @@ const isNewApp = computed(() => !form.value.id)
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   color: #b45309;
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: 6px;
   padding: 8px 12px;
   margin: 0;
-  line-height: 1.5;
+  line-height: var(--idds-caption-small-line);
 }
 .step3-required-note svg { flex-shrink: 0; margin-top: 1px; color: #b45309; }
 
@@ -846,40 +900,9 @@ const isNewApp = computed(() => !form.value.id)
 }
 
 @media (max-width: 640px) {
-  .app-form-modal {
-    width: min(100vw - 20px, 760px);
-    max-height: calc(100vh - 20px);
-  }
-
-  .wizard-stepper {
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 0;
-    margin-bottom: 20px;
-  }
-
-  .step-item {
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-    gap: 6px;
-    text-align: center;
-  }
-
-  .step-label {
-    font-size: 11px;
-    line-height: 1.25;
-  }
-
-  .step-line {
-    flex: 0 0 22px;
-    margin: 14px -2px 0;
-  }
-
   .form-row {
     grid-template-columns: 1fr;
-    gap: 0;
+    gap: var(--ina-spacing-4);
   }
 
   .step3-header,
@@ -895,8 +918,7 @@ const isNewApp = computed(() => !form.value.id)
     flex-direction: column-reverse;
   }
 
-  .btn-cancel,
-  .btn-submit {
+  .modal-actions :deep(.ina-button) {
     width: 100%;
     justify-content: center;
   }

@@ -85,9 +85,9 @@ class AplikasiController extends Controller
     }
 
     /**
-     * Global status statistics for dashboard cards.
+     * Status statistics scoped to the same data visibility as the application list.
      */
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
         $devStatuses = AplikasiStatus::developmentValues();
         $opStatuses = AplikasiStatus::operationalValues();
@@ -99,12 +99,11 @@ class AplikasiController extends Controller
         $inactivePlaceholders = implode(',', array_fill(0, count($inactiveStatuses), '?'));
         $stoppedPlaceholders = implode(',', array_fill(0, count($stoppedStatuses), '?'));
 
-        $stats = Cache::remember('aplikasi:stats:v1', now()->addMinutes(5), function () use (
+        $calculateStats = function ($query) use (
             $devStatuses, $opStatuses, $inactiveStatuses, $stoppedStatuses,
             $devPlaceholders, $opPlaceholders, $inactivePlaceholders, $stoppedPlaceholders
         ) {
-            $row = Aplikasi::query()
-                ->selectRaw("
+            $row = $query->selectRaw("
                     SUM(CASE WHEN status IN ({$devPlaceholders}) THEN 1 ELSE 0 END) AS development,
                     SUM(CASE WHEN status IN ({$opPlaceholders}) THEN 1 ELSE 0 END) AS operational,
                     SUM(CASE WHEN status IN ({$inactivePlaceholders}) THEN 1 ELSE 0 END) AS inactive,
@@ -118,7 +117,20 @@ class AplikasiController extends Controller
                 'inactive' => (int) ($row->inactive ?? 0),
                 'stopped' => (int) ($row->stopped ?? 0),
             ];
-        });
+        };
+
+        $user = $request->user();
+        if ($user?->isUnitKerja()) {
+            $query = Aplikasi::query();
+            AplikasiAccess::scopeVisibleToUnitKerja($query, $user);
+            $stats = $calculateStats($query);
+        } else {
+            $stats = Cache::remember(
+                'aplikasi:stats:v1',
+                now()->addMinutes(5),
+                fn () => $calculateStats(Aplikasi::query())
+            );
+        }
 
         return ApiResponse::success($stats);
     }
@@ -182,6 +194,14 @@ class AplikasiController extends Controller
                 $data['status'] = Aplikasi::STATUS_DIAJUKAN;
 
                 $item = Aplikasi::create($data);
+
+                $item->statusHistories()->create([
+                    'status_sebelumnya' => null,
+                    'status_baru' => Aplikasi::STATUS_DIAJUKAN,
+                    'aksi' => 'Pengajuan Dibuat',
+                    'catatan' => 'Pengajuan aplikasi dikirim untuk diverifikasi.',
+                    'changed_by' => $request->user()?->getKey(),
+                ]);
 
                 Log::info('Aplikasi created', [
                     'aplikasi_id' => $item->getKey(),
@@ -298,23 +318,27 @@ class AplikasiController extends Controller
         try {
             $paths = DB::transaction(function () use ($request, $id) {
                 $item = Aplikasi::with([
-                    'documents:id,aplikasi_id,storage_path',
+                    'documents:id,aplikasi_id,storage_path,storage_disk',
                 ])->findOrFail($id);
 
                 $rfcFormPaths = Rfc::withTrashed()
                     ->where('aplikasi_id', $item->getKey())
                     ->pluck('formulir_path');
 
-                $paths = collect([
+                $legacyPublicPaths = collect([
                     $item->getAttribute('doc_pengajuan_path'),
                     $item->getAttribute('doc_permohonan_path'),
                     $item->getAttribute('doc_studi_kelayakan_path'),
                 ])
-                    ->merge($item->documents->pluck('storage_path'))
                     ->merge($rfcFormPaths)
                     ->filter()
                     ->unique()
                     ->values()
+                    ->all();
+
+                $documentPaths = $item->documents
+                    ->groupBy(fn ($document) => (string) ($document->getAttribute('storage_disk') ?: 'public'))
+                    ->map(fn ($documents) => $documents->pluck('storage_path')->filter()->unique()->values()->all())
                     ->all();
 
                 Log::warning('Aplikasi permanently deleted', [
@@ -327,11 +351,19 @@ class AplikasiController extends Controller
                 $item->notifications()->delete();
                 $item->forceDelete();
 
-                return $paths;
+                return [
+                    'public' => array_values(array_unique(array_merge(
+                        $legacyPublicPaths,
+                        $documentPaths['public'] ?? []
+                    ))),
+                    'local' => $documentPaths['local'] ?? [],
+                ];
             });
 
-            if (! empty($paths)) {
-                Storage::disk('public')->delete($paths);
+            foreach ($paths as $disk => $diskPaths) {
+                if (! empty($diskPaths) && in_array($disk, ['public', 'local'], true)) {
+                    Storage::disk($disk)->delete($diskPaths);
+                }
             }
 
             $this->forgetStatsCache();

@@ -75,6 +75,8 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     )->group(function () {
         Route::get('aplikasi/{aplikasi}/documents', [AplikasiDocumentController::class, 'index']);
         Route::post('aplikasi/{aplikasi}/documents', [AplikasiDocumentController::class, 'store']);
+        Route::get('aplikasi/{aplikasi}/documents/{document}/preview', [AplikasiDocumentController::class, 'preview'])
+            ->name('aplikasi.documents.preview');
         
         // Notes can be added by any role participating in the app
         Route::post('aplikasi/{aplikasi}/notes', [AplikasiWorkflowController::class, 'storeNote']);
@@ -157,6 +159,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         Route::post('aplikasi/{aplikasi}/implementation-checklists', [AplikasiWorkflowController::class, 'implementationStore']);
         Route::put('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
         Route::patch('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
+        Route::delete('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationDestroy']);
     });
 
     // Tim Uji Keamanan

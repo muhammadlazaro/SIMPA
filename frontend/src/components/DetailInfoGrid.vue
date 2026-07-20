@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { getShortStatusLabel, getStatusBadgeClass } from '../constants/status'
+import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps({
   app: {
@@ -9,9 +10,13 @@ const props = defineProps({
   },
 })
 
-const statusClass = computed(() =>
-  getStatusBadgeClass(props.app?.status, 'badge-info')
-)
+const statusTone = computed(() => {
+  const badgeClass = getStatusBadgeClass(props.app?.status, 'badge-info')
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return 'info'
+})
 
 /** Capitalise first letter of each word */
 function titleCase(val) {
@@ -23,35 +28,35 @@ function titleCase(val) {
 <template>
   <div class="detail-grid">
     <div class="detail-item">
-      <span class="detail-label">Nama Layanan</span>
+      <span class="detail-label">Nama layanan</span>
       <div>{{ app?.nama_layanan || '-' }}</div>
     </div>
     <div class="detail-item">
-      <span class="detail-label">Nama Singkat</span>
+      <span class="detail-label">Nama singkat</span>
       <div>{{ app?.nama_singkat || '-' }}</div>
     </div>
     <div class="detail-item">
-      <span class="detail-label">Nama Aplikasi</span>
+      <span class="detail-label">Nama aplikasi</span>
       <div>{{ app?.nama_aplikasi || '-' }}</div>
     </div>
     <div class="detail-item">
-      <span class="detail-label">Jenis Layanan</span>
+      <span class="detail-label">Jenis layanan</span>
       <div>{{ titleCase(app?.jenis_layanan_aplikasi) }}</div>
     </div>
     <div class="detail-item">
-      <span class="detail-label">Kode Unit Organisasi</span>
+      <span class="detail-label">Kode unit organisasi</span>
       <div>{{ app?.kode_unitOrganisasi || '-' }}</div>
     </div>
     <div class="detail-item">
-      <span class="detail-label">Tipe Akuisisi</span>
+      <span class="detail-label">Tipe akuisisi</span>
       <div>{{ titleCase(app?.tipe_akuisisi) }}</div>
     </div>
     <div class="detail-item">
       <span class="detail-label">Status</span>
       <div>
-        <span :class="['badge', statusClass]">
+        <StatusBadge :tone="statusTone">
           {{ getShortStatusLabel(app?.status) }}
-        </span>
+        </StatusBadge>
       </div>
     </div>
   </div>

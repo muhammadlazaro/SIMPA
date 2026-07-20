@@ -11,7 +11,8 @@ export const useToastStore = defineStore('toast', {
      */
     push(message, type = 'info', timeoutMs = 3000) {
       const id = Date.now() + Math.random()
-      this.items.push({ id, message, type })
+      // IDDS recommends one temporary toast at a time so feedback stays focused.
+      this.items = [{ id, message, type }]
       if (timeoutMs > 0) {
         setTimeout(() => this.remove(id), timeoutMs)
       }

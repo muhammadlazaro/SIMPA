@@ -1,40 +1,74 @@
 <script setup>
+import { Button } from '@idds/vue'
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import http from '../lib/http'
-import UserLayout from '../layouts/UserLayout.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import AsyncState from '../components/AsyncState.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { getHomeByRole } from '../constants/roles'
-import { usePagination } from '../composables/usePagination.js'
 import { warnDev } from '../utils/logger'
 import { getShortStatusLabel, getStatusBadgeClass } from '../constants/status'
 
-const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
+const router = useRouter()
 
 const apps = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const searchAplikasi = ref('')
 let filterTimer = null
 const basePath = computed(() => getHomeByRole(auth.role).path)
-const pageTitle = computed(() => auth.role === 'tim_uji_keamanan' ? 'Uji Keamanan Aplikasi' : 'Kelola Aplikasi')
-const listTitle = computed(() => auth.role === 'tim_uji_keamanan' ? 'Daftar Aplikasi Tahap Testing' : 'Daftar Aplikasi')
+const workspaceCopy = computed(() => {
+  const copy = {
+    tim_implementasi_aplikasi: {
+      eyebrow: 'Tim Implementasi',
+      title: 'Implementasi aplikasi',
+      description: 'Kelola aplikasi yang siap dikembangkan dan tindak lanjuti hasil evaluasi.',
+      list: 'Aplikasi yang perlu diimplementasikan',
+      empty: 'Belum ada aplikasi yang membutuhkan implementasi.',
+    },
+    devops_developer: {
+      eyebrow: 'DevOps',
+      title: 'Deployment aplikasi',
+      description: 'Pantau aplikasi yang siap dipublikasikan ke staging maupun production.',
+      list: 'Aplikasi yang siap dideploy',
+      empty: 'Belum ada aplikasi yang siap masuk proses deployment.',
+    },
+    tim_uji_keamanan: {
+      eyebrow: 'Tim Uji Keamanan',
+      title: 'Pengujian keamanan',
+      description: 'Tinjau aplikasi pada tahap pengujian dan dokumentasikan hasil pemeriksaan.',
+      list: 'Aplikasi yang perlu diuji',
+      empty: 'Belum ada aplikasi yang membutuhkan pengujian keamanan.',
+    },
+  }
+
+  return copy[auth.role] || {
+    eyebrow: 'Aplikasi',
+    title: 'Daftar aplikasi',
+    description: 'Pantau aplikasi yang membutuhkan tindak lanjut Anda.',
+    list: 'Aplikasi',
+    empty: 'Belum ada aplikasi yang membutuhkan tindakan.',
+  }
+})
 const hasActiveSearch = computed(() => !!searchAplikasi.value?.trim())
 
 // Pagination state
 const appsPagination = ref({
   currentPage: 1,
   lastPage: 1,
-  perPage: 10,
+  perPage: 30,
   total: 0
 })
-
-const { pageNumbers: appPageNumbers } = usePagination(appsPagination)
 
 onMounted(async () => {
   await loadAplikasiData()
@@ -46,6 +80,7 @@ onBeforeUnmount(() => {
 
 async function loadAplikasiData(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const searchQuery = searchAplikasi.value?.trim() ? `q=${encodeURIComponent(searchAplikasi.value.trim())}&` : ''
     const statusByRole = {
@@ -64,7 +99,7 @@ async function loadAplikasiData(page = 1) {
       appsPagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || appsPagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || appsPagination.value.perPage || 30,
         total: Number(meta.total) || 0
       }
     } else {
@@ -72,6 +107,7 @@ async function loadAplikasiData(page = 1) {
     }
   } catch (error) {
     warnDev('[UserDashboard] Gagal memuat daftar aplikasi', error)
+    loadError.value = 'Daftar aplikasi belum dapat dimuat. Periksa koneksi lalu coba lagi.'
     toast.push('Tidak dapat memuat daftar aplikasi.', 'error', 4000)
   } finally {
     loading.value = false
@@ -99,242 +135,107 @@ function rowNumber(idx) {
   return ((appsPagination.value.currentPage - 1) * appsPagination.value.perPage) + idx + 1
 }
 
-function viewDetail(appId) {
-  const rolePath = getHomeByRole(auth.role).path
-  const targetPath = `${rolePath}/app/${appId}`
-
-  router.push(targetPath).catch((error) => {
-    warnDev('[UserDashboard] Navigasi path gagal', error)
-    const routeName = `${rolePath.replace('/', '')}-app-detail`
-    router.push({ name: routeName, params: { id: appId } }).catch((error_) => {
-      warnDev('[UserDashboard] Navigasi nama route gagal', error_)
-      toast.push('Tidak dapat membuka detail aplikasi.', 'error', 4000)
-    })
-  })
+function statusToneClass(status) {
+  const badgeClass = getStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
 }
 
 </script>
 
 <template>
-  <UserLayout>
-    <div class="container workspace-dashboard">
-      <div class="workspace-hero-card">
-        <div class="workspace-hero-text">
-          <nav class="workspace-hero-breadcrumb" aria-label="breadcrumb">
-            <button @click="router.push(basePath)" class="ah-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="ah-bc-sep">/</span>
-            <span class="ah-bc-current">{{ pageTitle }}</span>
-          </nav>
-          <h2 class="workspace-hero-title">{{ pageTitle }}</h2>
-          <p class="workspace-hero-sub">{{ listTitle }}</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      :eyebrow="workspaceCopy.eyebrow"
+      :title="workspaceCopy.title"
+      :description="workspaceCopy.description"
+    />
 
+    <div class="ui-page-content">
+      <section class="ui-panel" aria-labelledby="workspace-list-title">
+        <header class="ui-panel-header">
+          <div>
+            <h2 id="workspace-list-title">{{ workspaceCopy.list }}</h2>
+            <p class="ui-table-subtitle">{{ appsPagination.total }} aplikasi memerlukan tindak lanjut</p>
+          </div>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="searchAplikasi"
+              label="Cari aplikasi"
+              placeholder="Cari aplikasi"
+              @update:model-value="scheduleFilterUpdate"
+            />
+          </div>
+        </header>
 
-    <!-- Aplikasi Section -->
-    <div class="content-section active">
-      <div class="card">
-        <DataCardHead :title="listTitle">
-          <template #actions>
-            <div class="search-group">
-              <span class="search-icon">
-                <Icons name="search" :size="16" />
-              </span>
-              <input 
-                type="text" 
-                v-model="searchAplikasi" 
-                @input="scheduleFilterUpdate"
-                placeholder="Cari aplikasi..."
-                maxlength="50"
-                aria-label="Cari aplikasi" 
-              />
-            </div>
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="apps.length === 0"
+          :empty-icon="hasActiveSearch ? 'search' : 'inbox'"
+          :empty-title="hasActiveSearch ? 'Aplikasi tidak ditemukan' : 'Belum ada pekerjaan'"
+          :empty-description="hasActiveSearch
+            ? 'Coba kata kunci lain atau hapus pencarian.'
+            : workspaceCopy.empty"
+          @retry="loadAplikasiData(appsPagination.currentPage)"
+        >
+          <template v-if="hasActiveSearch" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearSearch">
+              Hapus pencarian
+            </Button>
           </template>
-        </DataCardHead>
-        
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p>Memuat data aplikasi...</p>
-        </div>
-        <div v-else-if="apps.length === 0 && hasActiveSearch" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="search" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Tidak Ada Hasil</h3>
-          <p class="global-empty-text">
-            Tidak ada aplikasi yang cocok dengan kata kunci pencarian ini.
-          </p>
-          <button type="button" class="btn btn-secondary" @click="clearSearch">
-            Hapus pencarian
-          </button>
-        </div>
-        <div v-else-if="apps.length === 0" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="inbox" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Belum Ada Aplikasi</h3>
-          <p class="global-empty-text">
-            Belum ada aplikasi yang membutuhkan tindakan pada tahap ini.
-          </p>
-          <button class="btn btn-secondary" @click="loadAplikasiData(1)">
-            <Icons name="refresh-cw" :size="16" />
-            Muat ulang
-          </button>
-        </div>
-        <div v-else>
-        <DataTable>
-          <thead>
-            <tr>
+
+          <DataTable>
+            <thead>
+              <tr>
                 <th scope="col" class="col-num">#</th>
-                <th scope="col">Nama Aplikasi</th>
-                <th scope="col">Kode Unit</th>
+                <th scope="col">Nama aplikasi</th>
+                <th scope="col">Kode unit</th>
                 <th scope="col">Status</th>
-                <th scope="col" class="col-aksi">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(app, idx) in apps" :key="app.id" class="data-table-row is-clickable" @click="viewDetail(app.id)">
-              <td class="col-num">{{ rowNumber(idx) }}</td>
-              <td>
-                <div class="app-name-cell">
-                  <span class="app-name-main">{{ app.nama_aplikasi || app.nama_layanan || '-' }}</span>
-                  <span class="app-name-sub">{{ app.nama_layanan || '-' }}</span>
-                </div>
-              </td>
-              <td>{{ app.kode_unitOrganisasi }}</td>
-              <td>
-                <span :class="['badge', getStatusBadgeClass(app.status)]">
-                  {{ getShortStatusLabel(app.status) }}
-                </span>
-              </td>
-              <td @click.stop>
-                <div class="action-group">
-                  <button class="action-btn table-action-btn view-btn" @click="viewDetail(app.id)">
-                    <Icons name="eye" :size="14" />
-                    Detail
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </DataTable>
-        </div>
-        
-        <!-- Pagination Controls -->
-        <div v-if="appsPagination.lastPage > 1" class="pagination">
-          <div class="pagination-info">
-            Menampilkan {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + 1 }} - 
-            {{ Math.min(appsPagination.currentPage * appsPagination.perPage, appsPagination.total) }} 
-            dari {{ appsPagination.total }} data
-          </div>
-          <div class="pagination-controls">
-            <button 
-              @click="changePage(appsPagination.currentPage - 1)" 
-              :disabled="appsPagination.currentPage === 1"
-              class="pagination-btn">
-              <Icons name="chevron-left" :size="16" />
-            </button>
-            
-            <button 
-              v-for="page in appPageNumbers" 
-              :key="page"
-              @click="page !== '...' && changePage(page)"
-              :class="['pagination-btn', { active: page === appsPagination.currentPage, disabled: page === '...' }]">
-              {{ page }}
-            </button>
-            
-            <button 
-              @click="changePage(appsPagination.currentPage + 1)" 
-              :disabled="appsPagination.currentPage === appsPagination.lastPage"
-              class="pagination-btn">
-              <Icons name="chevron-right" :size="16" />
-            </button>
-          </div>
-        </div>
-      </div>
+                <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(app, idx) in apps" :key="app.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <RouterLink class="ui-table-link" :to="`${basePath}/app/${app.id}`">
+                    {{ app.nama_aplikasi || app.nama_layanan || '-' }}
+                  </RouterLink>
+                  <span class="ui-table-subtitle">{{ app.nama_layanan || '-' }}</span>
+                </td>
+                <td data-label="Kode unit">{{ app.kode_unitOrganisasi || '-' }}</td>
+                <td data-label="Status">
+                  <StatusBadge :tone="statusToneClass(app.status)">
+                    {{ getShortStatusLabel(app.status) }}
+                  </StatusBadge>
+                </td>
+                <td class="ui-table-actions">
+                  <IconActionCell :label="`Aksi untuk ${app.nama_aplikasi || app.nama_layanan}`">
+                    <IconActionButton
+                      label="Lihat detail"
+                      icon="eye"
+                      @click="router.push(`${basePath}/app/${app.id}`)"
+                    />
+                  </IconActionCell>
+                </td>
+              </tr>
+            </tbody>
+          </DataTable>
+        </AsyncState>
+
+        <PaginationBar
+          :page="appsPagination.currentPage"
+          :last-page="appsPagination.lastPage"
+          :total="appsPagination.total"
+          @change="changePage"
+        />
+      </section>
     </div>
-    </div>
-  </UserLayout>
+  </div>
 </template>
 
 <style scoped>
-.workspace-hero-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
-  padding: 24px 28px;
-  margin: 0 20px 20px;
-  box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
-}
-
-.workspace-hero-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  font-size: 12px;
-}
-
-.ah-bc-link {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.55);
-  cursor: pointer;
-  padding: 0;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: color 0.15s;
-}
-
-.ah-bc-link:hover { color: rgba(255, 255, 255, 0.9); }
-.ah-bc-sep { color: rgba(255, 255, 255, 0.35); }
-.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: 500; }
-
-.workspace-hero-title {
-  margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.workspace-hero-sub {
-  margin: 0;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1.5;
-}
-
-.app-name-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.app-name-main {
-  color: var(--notion-text);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.app-name-sub {
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-}
-
-@media (max-width: 768px) {
-  .workspace-hero-card {
-    flex-direction: column;
-    align-items: flex-start;
-    margin: 0 12px 16px;
-  }
-}
 </style>

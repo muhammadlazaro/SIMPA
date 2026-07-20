@@ -1,15 +1,23 @@
 <script setup>
+import { Button } from '@idds/vue'
+import { IconPlus } from '@tabler/icons-vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToastStore } from '../stores/toast'
 import http from '../lib/http'
-import PengelolaLayout from '../layouts/PengelolaLayout.vue'
 import AplikasiFormModal from '../components/AplikasiFormModal.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import ConfirmationDrawer from '../components/ConfirmationDrawer.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
+import IddsSelect from '../components/IddsSelect.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import AsyncState from '../components/AsyncState.vue'
+import MetricCard from '../components/MetricCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { usePengelolaNotifications } from '../composables/usePengelolaNotifications.js'
-import { usePagination } from '../composables/usePagination.js'
 import { warnDev } from '../utils/logger'
 import { getShortStatusLabel, getStatusBadgeClass } from '../constants/status'
 
@@ -19,6 +27,7 @@ const router = useRouter()
 
 const apps = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const searchAplikasi = ref('')
 const filters = ref({
   statusGroup: 'all',
@@ -44,7 +53,7 @@ const INACTIVE_STATUSES = ['nonaktif']
 const STOPPED_STATUSES = ['ditolak', 'tidak_layak']
 
 const STATUS_GROUP_OPTIONS = [
-  { value: 'all', label: 'Semua Status', statuses: [] },
+  { value: 'all', label: 'Semua status', statuses: [] },
   { value: 'development', label: 'Development', statuses: DEVELOPMENT_STATUSES },
   { value: 'operational', label: 'Operasional', statuses: OPERATIONAL_STATUSES },
   { value: 'inactive', label: 'Nonaktif', statuses: INACTIVE_STATUSES },
@@ -57,6 +66,11 @@ const PROCESS_STATUS_OPTIONS = [
   ...OPERATIONAL_STATUSES,
   ...INACTIVE_STATUSES,
 ]
+const statusGroupSelectOptions = STATUS_GROUP_OPTIONS.map(({ value, label }) => ({ value, label }))
+const processStatusSelectOptions = [
+  { value: 'all', label: 'Semua tahap' },
+  ...PROCESS_STATUS_OPTIONS.map((status) => ({ value: status, label: getShortStatusLabel(status) })),
+]
 
 const hasActiveFilter = computed(() =>
   !!searchAplikasi.value?.trim()
@@ -67,11 +81,9 @@ const hasActiveFilter = computed(() =>
 const appsPagination = ref({
   currentPage: 1,
   lastPage: 1,
-  perPage: 10,
+  perPage: 30,
   total: 0,
 })
-
-const { pageNumbers: appPageNumbers } = usePagination(appsPagination)
 
 const showAppModal = ref(false)
 const editingApp = ref(null)
@@ -108,7 +120,6 @@ onMounted(async () => {
   await Promise.all([
     loadAplikasiData(),
     loadGlobalStats(),
-    loadPengelolaNotifications(),
   ])
 })
 
@@ -118,6 +129,7 @@ onBeforeUnmount(() => {
 
 async function loadAplikasiData(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const params = new URLSearchParams({
       per_page: String(appsPagination.value.perPage),
@@ -137,7 +149,7 @@ async function loadAplikasiData(page = 1) {
       appsPagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || appsPagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || appsPagination.value.perPage || 30,
         total: Number(meta.total) || 0,
       }
     } else {
@@ -145,7 +157,7 @@ async function loadAplikasiData(page = 1) {
     }
   } catch (error) {
     warnDev('[PengelolaDashboard] loadAplikasiData error:', error)
-    toast.push('Gagal memuat data aplikasi', 'error')
+    loadError.value = error.response?.data?.message || 'Koneksi ke server gagal. Silakan coba lagi.'
   } finally {
     loading.value = false
   }
@@ -163,15 +175,6 @@ function getStatusFilterValue() {
 
   const group = STATUS_GROUP_OPTIONS.find((item) => item.value === filters.value.statusGroup)
   return group?.statuses?.length ? group.statuses.join(',') : ''
-}
-
-function getGroupCount(groupValue) {
-  if (groupValue === 'development') return stats.value.development
-  if (groupValue === 'operational') return stats.value.operational
-  if (groupValue === 'inactive') return stats.value.inactive
-  if (groupValue === 'stopped') return stats.value.stopped
-
-  return stats.value.development + stats.value.operational + stats.value.inactive + stats.value.stopped
 }
 
 function applyStatusGroupFilter() {
@@ -252,6 +255,19 @@ function rowNumber(idx) {
   return start + idx
 }
 
+function statusToneClass(status) {
+  const badgeClass = getStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
+}
+
+function selectStatusGroup(group) {
+  filters.value.statusGroup = group
+  applyStatusGroupFilter()
+}
+
 function viewDetail(appId) {
   router.push({ name: 'pengelola-aplikasi-app-detail', params: { id: appId } })
 }
@@ -266,215 +282,152 @@ async function onAppSaved() {
 </script>
 
 <template>
-  <PengelolaLayout>
-    <div class="container workspace-dashboard">
-      <!-- Hero card (breadcrumb terintegrasi) -->
-      <div class="workspace-hero-card">
-        <div class="workspace-hero-text">
-          <nav class="workspace-hero-breadcrumb" aria-label="breadcrumb">
-            <button @click="router.push('/pengelola-aplikasi')" class="ah-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="ah-bc-sep">/</span>
-            <span class="ah-bc-current">Kelola Aplikasi</span>
-          </nav>
-          <h2 class="workspace-hero-title">Kelola Aplikasi</h2>
-          <p class="workspace-hero-sub">Pantau, kelola, dan proses seluruh pengajuan aplikasi dari unit kerja.</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Pengelola Aplikasi"
+      title="Kelola aplikasi"
+      description="Pantau pengajuan, proses workflow, dan data aplikasi dalam satu ruang kerja."
+    >
+      <template #actions>
+        <Button hierarchy="primary" size="lg" :prefix-icon="IconPlus" @click="openAddModal">
+          Tambah aplikasi
+        </Button>
+      </template>
+    </PageHeader>
 
-    <!-- Aplikasi Section -->
-    <div class="content-section active">
-      <!-- Stats modern style -->
-      <div class="stats-grid">
-        <!-- Development -->
-        <div class="stat-card dev">
-          <div class="stat-header">
-            <span class="stat-label">Development</span>
-            <div class="stat-icon-wrap bg-amber">
-              <Icons name="code" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.development }}</div>
-        </div>
+    <div class="ui-page-content">
+      <section class="ui-metric-grid" aria-label="Ringkasan aplikasi">
+        <MetricCard
+          label="Dalam pengembangan"
+          :value="stats.development"
+          icon="code"
+          tone="amber"
+          interactive
+          :active="filters.statusGroup === 'development'"
+          @select="selectStatusGroup('development')"
+        />
+        <MetricCard
+          label="Operasional"
+          :value="stats.operational"
+          icon="check-circle"
+          tone="green"
+          interactive
+          :active="filters.statusGroup === 'operational'"
+          @select="selectStatusGroup('operational')"
+        />
+        <MetricCard
+          label="Nonaktif"
+          :value="stats.inactive"
+          icon="alert-circle"
+          tone="red"
+          interactive
+          :active="filters.statusGroup === 'inactive'"
+          @select="selectStatusGroup('inactive')"
+        />
+        <MetricCard
+          label="Perlu ditinjau"
+          :value="pengajuanBaruCount"
+          icon="inbox"
+          tone="blue"
+          interactive
+          :active="filters.processStatus === 'diajukan'"
+          @select="filters.processStatus = 'diajukan'; applyProcessFilter()"
+        />
+      </section>
 
-        <!-- Operasional -->
-        <div class="stat-card production">
-          <div class="stat-header">
-            <span class="stat-label">Operasional</span>
-            <div class="stat-icon-wrap bg-green">
-              <Icons name="check-circle" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.operational }}</div>
-        </div>
-
-        <!-- Nonaktif -->
-        <div class="stat-card maintenance">
-          <div class="stat-header">
-            <span class="stat-label">Nonaktif</span>
-            <div class="stat-icon-wrap bg-red">
-              <Icons name="alert-circle" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.inactive }}</div>
-        </div>
-
-      </div>
-
-      <div class="card">
-        <DataCardHead title="Daftar Aplikasi">
-          <template #actions>
-            <div class="search-group">
-              <span class="search-icon">
-                <Icons name="search" :size="16" />
-              </span>
-              <input 
-                type="text" 
-                v-model="searchAplikasi" 
-                @input="scheduleSearch"
-                placeholder="Cari aplikasi"
-                maxlength="50" 
-                aria-label="Cari aplikasi"
-              />
-            </div>
-            <select
+      <section class="ui-panel" aria-labelledby="application-list-title">
+        <header class="ui-panel-header">
+          <h2 id="application-list-title">Daftar aplikasi</h2>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="searchAplikasi"
+              label="Cari aplikasi"
+              placeholder="Cari aplikasi"
+              @update:model-value="scheduleSearch"
+            />
+            <IddsSelect
               v-model="filters.statusGroup"
-              class="filter-select compact"
-              aria-label="Filter kategori status aplikasi"
+              :options="statusGroupSelectOptions"
+              accessible-label="Filter kategori status aplikasi"
+              placeholder="Semua status"
+              width="180px"
               @change="applyStatusGroupFilter"
-            >
-              <option v-for="group in STATUS_GROUP_OPTIONS" :key="group.value" :value="group.value">
-                {{ group.label }}
-              </option>
-            </select>
-            <select
+            />
+            <IddsSelect
               v-model="filters.processStatus"
-              class="filter-select compact process"
-              aria-label="Filter proses aplikasi"
+              :options="processStatusSelectOptions"
+              accessible-label="Filter tahap proses aplikasi"
+              placeholder="Semua tahap"
+              width="190px"
               @change="applyProcessFilter"
-            >
-              <option value="all">Tahap Proses</option>
-              <option v-for="status in PROCESS_STATUS_OPTIONS" :key="status" :value="status">
-                {{ getShortStatusLabel(status) }}
-              </option>
-            </select>
-            <button class="btn btn-primary" @click="openAddModal">
-              <Icons name="plus" :size="16" />
-              Tambah Aplikasi
-            </button>
+            />
+          </div>
+        </header>
+
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="apps.length === 0"
+          :empty-icon="hasActiveFilter ? 'search' : 'inbox'"
+          :empty-title="hasActiveFilter ? 'Aplikasi tidak ditemukan' : 'Belum ada aplikasi'"
+          :empty-description="hasActiveFilter
+            ? 'Ubah kata kunci atau filter untuk menampilkan hasil lain.'
+            : 'Aplikasi baru yang ditambahkan akan tampil di sini.'"
+          @retry="loadAplikasiData(appsPagination.currentPage)"
+        >
+          <template v-if="hasActiveFilter" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearFilters">
+              Hapus filter
+            </Button>
           </template>
-        </DataCardHead>
-        
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p>Memuat data aplikasi...</p>
-        </div>
-        <div v-else-if="apps.length === 0 && hasActiveFilter" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="search" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Tidak Ada Hasil</h3>
-          <p class="global-empty-text">
-            Tidak ada aplikasi yang cocok dengan filter ini.
-          </p>
-          <button type="button" class="btn btn-secondary" @click="clearFilters">
-            Hapus filter
-          </button>
-        </div>
-        <div v-else-if="apps.length === 0" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="inbox" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Belum Ada Aplikasi</h3>
-          <p class="global-empty-text">
-            Belum ada aplikasi yang diajukan atau dikelola dalam sistem ini.
-          </p>
-          <button @click="openAddModal" class="btn btn-primary">
-            <Icons name="plus" :size="16" />
-            Tambah Aplikasi
-          </button>
-        </div>
-        <div v-else>
+
           <DataTable>
             <thead>
               <tr>
                 <th scope="col" class="col-num">#</th>
-                <th scope="col">Nama Aplikasi</th>
-                <th scope="col">Kode Unit</th>
+                <th scope="col">Nama aplikasi</th>
+                <th scope="col">Kode unit</th>
                 <th scope="col">Status</th>
-                <th scope="col" class="col-aksi">Aksi</th>
+                <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(app, idx) in apps" :key="app.id" class="data-table-row is-clickable" @click="viewDetail(app.id)">
-                <td class="col-num">{{ rowNumber(idx) }}</td>
-                <td>
-                  <div class="app-name-cell">
-                    <span class="app-name-main">{{ app.nama_aplikasi }}</span>
-                    <span class="app-name-sub">{{ app.nama_layanan }} - {{ app.nama_singkat }}</span>
-                  </div>
+              <tr v-for="(app, idx) in apps" :key="app.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <RouterLink
+                    class="ui-table-link"
+                    :to="{ name: 'pengelola-aplikasi-app-detail', params: { id: app.id } }"
+                  >
+                    {{ app.nama_aplikasi }}
+                  </RouterLink>
+                  <span class="ui-table-subtitle">{{ app.nama_layanan }} · {{ app.nama_singkat }}</span>
                 </td>
-                <td class="col-unit">{{ app.kode_unitOrganisasi }}</td>
-                <td>
-                  <span :class="['badge', getStatusBadgeClass(app.status)]">
+                <td data-label="Kode unit">{{ app.kode_unitOrganisasi || '-' }}</td>
+                <td data-label="Status">
+                  <StatusBadge :tone="statusToneClass(app.status)">
                     {{ getShortStatusLabel(app.status) }}
-                  </span>
+                  </StatusBadge>
                 </td>
-                <td @click.stop>
-                  <div class="action-group">
-                    <button type="button" class="action-btn table-action-btn view-btn" @click="viewDetail(app.id)">
-                      <Icons name="eye" :size="14" />
-                      Detail
-                    </button>
-                    <button type="button" class="action-btn table-action-btn edit-btn" @click="openEditModal(app)">
-                      <Icons name="edit" :size="14" />
-                      Edit
-                    </button>
-                    <button type="button" class="action-btn table-action-btn delete-btn" @click="confirmDeleteApp(app)">
-                      <Icons name="trash" :size="14" />
-                      Hapus
-                    </button>
-                  </div>
+                <td class="ui-table-actions">
+                  <IconActionCell :label="`Aksi untuk ${app.nama_aplikasi}`">
+                    <IconActionButton label="Lihat detail" icon="eye" @click="viewDetail(app.id)" />
+                    <IconActionButton label="Edit aplikasi" icon="edit" @click="openEditModal(app)" />
+                    <IconActionButton label="Hapus aplikasi" icon="trash" tone="danger" @click="confirmDeleteApp(app)" />
+                  </IconActionCell>
                 </td>
               </tr>
             </tbody>
           </DataTable>
-        </div>
-        
-        <!-- Pagination Controls -->
-        <div v-if="appsPagination.lastPage > 1" class="pagination">
-          <div class="pagination-info">
-            Menampilkan {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + 1 }} - 
-            {{ Math.min(appsPagination.currentPage * appsPagination.perPage, appsPagination.total) }} 
-            dari {{ appsPagination.total }} data
-          </div>
-          <div class="pagination-controls">
-            <button 
-              @click="changePage(appsPagination.currentPage - 1)" 
-              :disabled="appsPagination.currentPage === 1"
-              class="pagination-btn">
-              <Icons name="chevron-left" :size="16" />
-            </button>
-            
-            <button 
-              v-for="page in appPageNumbers" 
-              :key="page"
-              @click="page !== '...' && changePage(page)"
-              :class="['pagination-btn', { active: page === appsPagination.currentPage, disabled: page === '...' }]">
-              {{ page }}
-            </button>
-            
-            <button 
-              @click="changePage(appsPagination.currentPage + 1)" 
-              :disabled="appsPagination.currentPage === appsPagination.lastPage"
-              class="pagination-btn">
-              <Icons name="chevron-right" :size="16" />
-            </button>
-          </div>
-        </div>
-      </div>
+        </AsyncState>
+
+        <PaginationBar
+          :page="appsPagination.currentPage"
+          :last-page="appsPagination.lastPage"
+          :total="appsPagination.total"
+          @change="changePage"
+        />
+      </section>
     </div>
 
     <AplikasiFormModal 
@@ -484,31 +437,18 @@ async function onAppSaved() {
       @saved="onAppSaved"
     />
 
-    <dialog v-if="showDeleteModal" class="modal active" open aria-labelledby="delete-app-title" @click.self="closeDeleteModal">
-      <div class="modal-content confirm-modal">
-        <div class="confirm-header">
-          <Icons name="alert" :size="48" class="confirm-icon" />
-          <h3 id="delete-app-title">Hapus Aplikasi Permanen</h3>
-        </div>
-        <div class="confirm-body">
-          <p>
-            Aplikasi berikut beserta dokumen, checklist, catatan, RFC, konfigurasi, notifikasi, dan riwayat statusnya akan dihapus permanen.
-          </p>
-          <p class="confirm-target"><strong>{{ deleteTarget?.nama_aplikasi || '-' }}</strong></p>
-          <p class="confirm-warning">Tindakan ini tidak dapat dibatalkan.</p>
-        </div>
-        <div class="confirm-actions">
-          <button type="button" class="btn btn-secondary" :disabled="deletingApp" @click="closeDeleteModal">Batal</button>
-          <button type="button" class="btn btn-danger" :disabled="deletingApp" @click="deleteApp">
-            <Icons name="trash" :size="14" />
-            {{ deletingApp ? 'Menghapus...' : 'Hapus Permanen' }}
-          </button>
-        </div>
-      </div>
-    </dialog>
+    <ConfirmationDrawer
+      v-model="showDeleteModal"
+      title="Hapus aplikasi permanen"
+      description="Dokumen, checklist, catatan, RFC, konfigurasi, notifikasi, dan riwayat status akan ikut dihapus dan tidak dapat dipulihkan."
+      :subject="deleteTarget?.nama_aplikasi || 'Aplikasi'"
+      confirm-label="Hapus permanen"
+      :loading="deletingApp"
+      @confirm="deleteApp"
+      @cancel="closeDeleteModal"
+    />
 
-    </div>
-  </PengelolaLayout>
+  </div>
 </template>
 
 <style scoped>
@@ -525,7 +465,7 @@ async function onAppSaved() {
   position: relative;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -556,16 +496,17 @@ async function onAppSaved() {
 .stat-icon-wrap.bg-red { background: #fef2f2; color: #ef4444; }
 
 .stat-label {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h4-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
-  line-height: 1.2;
+  line-height: var(--idds-heading-h4-line);
 }
 
 .stat-card::after {
@@ -589,33 +530,11 @@ async function onAppSaved() {
   border-color: #d1d5db;
 }
 
-.filter-select:focus-visible {
-  outline: 3px solid rgba(30, 64, 175, 0.2);
-  outline-offset: 2px;
-}
-
-.filter-select {
-  min-width: 168px;
-  height: 44px;
-  border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #334155;
-  padding: 0 12px;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 400;
-}
-
 @media (max-width: 768px) {
   .stats-grid { grid-template-columns: 1fr; }
   .stat-card { padding: 16px; }
-  .stat-value { font-size: 24px; }
-  .stat-label { font-size: 13px; }
-  .filter-select {
-    width: 100%;
-    min-width: 0;
-  }
+  .stat-value { font-size: var(--idds-heading-h5-size); line-height: var(--idds-heading-h5-line); }
+  .stat-label { font-size: var(--idds-caption-size); line-height: var(--idds-caption-line); }
 }
 
 .pengajuan-alert {
@@ -627,7 +546,7 @@ async function onAppSaved() {
   border-radius: 8px;
   border: 1px solid rgba(235, 87, 87, 0.35);
   background: rgba(235, 87, 87, 0.08);
-  color: var(--notion-text);
+  color: var(--ina-content-primary);
 }
 
 .pengajuan-alert svg {
@@ -640,14 +559,15 @@ async function onAppSaved() {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .pengajuan-alert-text span {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  font-weight: 400;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  font-weight: var(--idds-weight-regular);
+  line-height: var(--idds-caption-line);
 }
 
 /* ===== HERO CARD ===== */
@@ -657,8 +577,8 @@ async function onAppSaved() {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 20px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -669,7 +589,8 @@ async function onAppSaved() {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link {
@@ -678,29 +599,31 @@ async function onAppSaved() {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link:hover { color: rgba(255, 255, 255, 0.9); }
 .ah-bc-sep { color: rgba(255, 255, 255, 0.35); }
-.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: var(--idds-weight-medium); }
 
 .workspace-hero-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .workspace-hero-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.7);
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 
 /* ===== TABLE ===== */
@@ -710,10 +633,6 @@ async function onAppSaved() {
   width: 300px;
 }
 
-.action-group {
-  flex-wrap: wrap;
-}
-
 .app-name-cell {
   display: flex;
   flex-direction: column;
@@ -721,14 +640,16 @@ async function onAppSaved() {
 }
 
 .app-name-main {
-  font-weight: 600;
-  color: var(--notion-text);
-  font-size: 14px;
+  font-weight: var(--idds-weight-semibold);
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-sub {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 /* Alert alignment */

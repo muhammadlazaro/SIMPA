@@ -1,8 +1,20 @@
 <script setup>
+import {
+  Badge,
+  Button,
+  Modal,
+  SingleFileUpload,
+  Skeleton,
+  TextField,
+  Tooltip,
+} from '@idds/vue'
+import { IconDeviceFloppy, IconPlus, IconTrash, IconX } from '@tabler/icons-vue'
 import { ref, watch } from 'vue'
 import http from '../lib/http'
 import { useToastStore } from '../stores/toast'
 import Icons from './Icons.vue'
+import IddsSelect from './IddsSelect.vue'
+import { resolveIddsFileSelection } from '../utils/fileUpload'
 import { warnDev } from '../utils/logger'
 
 const props = defineProps({
@@ -23,7 +35,7 @@ const emit = defineEmits(['close', 'saved'])
 const toast = useToastStore()
 
 const loading = ref(false)
-const aplikasiId = ref(null)
+const resolvedAplikasiId = ref(null)
 const aplikasiData = ref(null)
 
 // Data arrays
@@ -39,15 +51,59 @@ const selectedFile = ref(null)
 // Available options
 const availablePlatforms = ['dws', 'layanan']
 const availableStorageTypes = ['db', 'object-storage']
+const platformOptions = availablePlatforms.map((value) => ({
+  label: value === 'dws' ? 'DWS' : 'Layanan',
+  value,
+}))
+const storageOptions = availableStorageTypes.map((value) => ({
+  label: value === 'db' ? 'Database' : 'Object Storage',
+  value,
+}))
+const methodOptions = ['GET', 'POST', 'PUT', 'DELETE'].map((value) => ({ label: value, value }))
+const resourceOptions = [
+  { label: 'Terbuka', value: 'terbuka' },
+  { label: 'Tertutup', value: 'tertutup' },
+]
 
 const uiPlatformLabelMap = {
   dws: 'DWS',
   layanan: 'Layanan',
 }
 
+const storageLabelMap = {
+  db: 'Database',
+  'object-storage': 'Object Storage',
+  cache: 'Cache',
+}
+
 function formatUiPlatformLabel(value) {
   if (!value) return ''
   return uiPlatformLabelMap[value] || value
+}
+
+function formatStorageLabel(value) {
+  if (!value) return ''
+  return storageLabelMap[value] || value
+}
+
+function getSectionCount(key) {
+  const counters = {
+    ui: uiPlatforms.value.length,
+    interop: interops.value.filter(Boolean).length,
+    storage: storages.value.filter(Boolean).length,
+    aktor: aktors.value.filter(Boolean).length,
+    transaksi: transaksis.value.filter((item) => item?.method && item?.url?.trim()).length,
+    dokumen: selectedFile.value ? 1 : 0,
+  }
+
+  return counters[key] || 0
+}
+
+function getSectionStatusText(key) {
+  const count = getSectionCount(key)
+  if (key === 'dokumen') return selectedFile.value ? 'Dipilih' : 'Opsional'
+  if (count === 0) return 'Belum diisi'
+  return `${count} item`
 }
 
 // Temporary refs for adding new items
@@ -68,14 +124,14 @@ async function loadData() {
   try {
     // Best: Use passed aplikasi object (no extra query!)
     if (props.aplikasi) {
-      aplikasiId.value = props.aplikasi.id
+      resolvedAplikasiId.value = props.aplikasi.id
       aplikasiData.value = props.aplikasi
     }
     // Good: Use passed aplikasiId
     else if (props.aplikasiId) {
-      aplikasiId.value = props.aplikasiId
+      resolvedAplikasiId.value = props.aplikasiId
       // Only fetch if aplikasi object not provided
-      const appResponse = await http.get(`/aplikasi/${aplikasiId.value}`)
+      const appResponse = await http.get(`/aplikasi/${resolvedAplikasiId.value}`)
       aplikasiData.value = appResponse.data.data || appResponse.data
     }
     // Fallback: Get aplikasi by name (slowest)
@@ -88,12 +144,12 @@ async function loadData() {
         return
       }
       
-      aplikasiId.value = aplikasi.id
+      resolvedAplikasiId.value = aplikasi.id
       aplikasiData.value = aplikasi
     }
     
     // Get analisa desain for this aplikasi
-    const analisaResponse = await http.get(`/analisa-desain?aplikasi_id=${aplikasiId.value}`)
+    const analisaResponse = await http.get(`/analisa-desain?aplikasi_id=${resolvedAplikasiId.value}`)
     const analisas = analisaResponse.data.data || analisaResponse.data || []
     
     // Group data
@@ -131,18 +187,18 @@ async function loadData() {
     }
   } catch (error) {
     warnDev('[AnalisaDesainModal] loadData error:', error)
-    toast.push('Gagal memuat data analisa desain', 'error')
+    toast.push('Gagal memuat data analisis desain', 'error')
   } finally {
     loading.value = false
   }
 }
 
-function handleFileSelect(event) {
-  const file = event.target.files[0]
-  if (file) {
-    selectedFile.value = file
-  } else {
-    selectedFile.value = null
+function handleFileSelect(file, validation) {
+  const selection = resolveIddsFileSelection(file, validation)
+  selectedFile.value = selection.file
+
+  if (selection.error) {
+    toast.push(selection.error, 'error')
   }
 }
 
@@ -160,10 +216,14 @@ function addPlatform(platform) {
 }
 
 function handleAddPlatform() {
-  if (newPlatform.value) {
-    addPlatform(newPlatform.value)
-    newPlatform.value = ''
-  }
+  if (!newPlatform.value) return
+  addPlatform(newPlatform.value)
+  newPlatform.value = ''
+}
+
+function selectPlatform(value) {
+  newPlatform.value = value
+  handleAddPlatform()
 }
 
 function addInterop() {
@@ -190,10 +250,14 @@ function addStorage(storage) {
 }
 
 function handleAddStorage() {
-  if (newStorage.value) {
-    addStorage(newStorage.value)
-    newStorage.value = ''
-  }
+  if (!newStorage.value) return
+  addStorage(newStorage.value)
+  newStorage.value = ''
+}
+
+function selectStorage(value) {
+  newStorage.value = value
+  handleAddStorage()
 }
 
 function removeStorage(storage) {
@@ -237,7 +301,7 @@ function removeTransaksi(index) {
 }
 
 async function handleSubmit() {
-  if (!aplikasiId.value) return
+  if (!resolvedAplikasiId.value) return
   
   loading.value = true
   try {
@@ -285,19 +349,19 @@ async function handleSubmit() {
     })
     
     // Single batch update request (much faster!)
-    await http.put(`/analisa-desain/batch/${aplikasiId.value}`, { items })
+    await http.put(`/analisa-desain/batch/${resolvedAplikasiId.value}`, { items })
     
     // Document upload
     if (selectedFile.value) {
       const formData = new FormData()
       formData.append('document_type', 'laporan_analisa_desain')
       formData.append('file', selectedFile.value)
-      await http.post(`/aplikasi/${aplikasiId.value}/documents`, formData, {
+      await http.post(`/aplikasi/${resolvedAplikasiId.value}/documents`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     }
     
-    toast.push('Data Analisa Desain berhasil disimpan!', 'success')
+    toast.push('Data Analisis Desain berhasil disimpan!', 'success')
     emit('saved')
     emit('close')
   } catch (error) {
@@ -314,27 +378,49 @@ function close() {
 </script>
 
 <template>
-  <div v-if="show" class="modal active" role="dialog" aria-modal="true" :aria-labelledby="`modal-title-analisa`">
-    <div class="modal-content modal-content-scrollable analisa-modal">
-      <div class="modal-header modal-header-sticky">
-        <h3 :id="`modal-title-analisa`">{{ readOnly ? 'Lihat' : 'Edit' }} Analisa Desain - {{ appName }}</h3>
-        <button class="close-btn" @click="close" aria-label="Tutup modal">&times;</button>
-      </div>
-      
-      <div class="modal-body">
-        <div v-if="loading" class="loading">Memuat data...</div>
+  <Modal
+    :model-value="show"
+    :title="readOnly ? 'Detail analisis desain' : 'Edit analisis desain'"
+    :description="appName || aplikasiData?.nama_aplikasi || 'Aplikasi'"
+    size="xl"
+    :show-close-button="true"
+    :show-footer="false"
+    close-label="Tutup analisis desain"
+    :close-on-backdrop="!loading"
+    :close-on-escape="!loading"
+    :persistent="loading"
+    padding-body="0"
+    @update:model-value="($event) => { if (!$event) close() }"
+  >
+    <div class="modal-body analisa-modal-body">
+        <div v-if="loading" class="analisa-loading">
+          <Skeleton v-for="index in 4" :key="index" height="96px" width="100%" rounded="lg" />
+          <span class="sr-only">Memuat data analisis desain</span>
+        </div>
       
       <form v-else class="analisa-design-form" @submit.prevent="handleSubmit">
+        <div class="analisa-form-panels">
         <!-- UI Platform Section -->
-        <div v-if="!props.focusSection || props.focusSection==='ui'" class="detail-section">
-          <h4>UI Platform</h4>
+        <section v-if="!props.focusSection || props.focusSection==='ui'" id="analisa-section-ui" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="monitor" :size="18" />
+              </span>
+              <div>
+                <h4>UI Platform</h4>
+                <p>Kanal utama antarmuka aplikasi yang digunakan oleh pengguna.</p>
+              </div>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('ui') }}</span>
+          </div>
           
           <!-- Read-only mode: Show as badges -->
           <div v-if="readOnly">
             <div v-if="uiPlatforms.length > 0" class="platform-badges">
-              <span v-for="(platform, idx) in uiPlatforms" :key="idx" class="badge badge-info">
+              <Badge v-for="(platform, idx) in uiPlatforms" :key="idx" type="soft" variant="info" size="md">
                 {{ formatUiPlatformLabel(platform) }}
-              </span>
+              </Badge>
             </div>
             <p v-else class="empty-text">
               Belum ada data UI Platform.
@@ -347,35 +433,49 @@ function close() {
             <div v-if="uiPlatforms.length > 0" class="platform-badges-editable">
               <span v-for="platform in uiPlatforms" :key="platform" class="badge badge-info badge-removable">
                 {{ formatUiPlatformLabel(platform) }}
-                <button type="button" class="badge-remove-btn" @click="removePlatform(platform)" title="Hapus">
-                  <Icons name="x" :size="12" />
-                </button>
+                <Tooltip :title="`Hapus ${formatUiPlatformLabel(platform)}`" placement="top">
+                  <Button hierarchy="custom" size="sm" class="badge-remove-btn" :prefix-icon="IconX" :aria-label="`Hapus ${formatUiPlatformLabel(platform)}`" @click="removePlatform(platform)" />
+                </Tooltip>
               </span>
             </div>
             <p v-else class="badge-empty-hint">Belum ada UI Platform yang dipilih</p>
             
             <!-- Add new platform dropdown -->
-            <div v-if="props.mode !== 'removeOnly'" class="platform-add-group">
-              <select v-model="newPlatform" @change="handleAddPlatform" class="platform-select">
-                <option value="" disabled>+ Tambah UI Platform</option>
-                <option v-for="platform in availablePlatforms" :key="platform" :value="platform" :disabled="uiPlatforms.includes(platform)">
-                  {{ formatUiPlatformLabel(platform) }}
-                </option>
-              </select>
-            </div>
+            <IddsSelect
+              v-if="props.mode !== 'removeOnly'"
+              :model-value="newPlatform"
+              label="Tambah UI Platform"
+              :options="platformOptions.map((option) => ({ ...option, disabled: uiPlatforms.includes(option.value) }))"
+              placeholder="Pilih UI Platform"
+              size="md"
+              width="100%"
+              panel-width="100%"
+              @update:model-value="selectPlatform"
+            />
           </div>
-        </div>
+        </section>
 
         <!-- Interop Section -->
-        <div v-if="!props.focusSection || props.focusSection==='interop'" class="detail-section">
-          <h4>Interoperabilitas</h4>
+        <section v-if="!props.focusSection || props.focusSection==='interop'" id="analisa-section-interop" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="grid" :size="18" />
+              </span>
+              <div>
+                <h4>Interoperabilitas</h4>
+                <p>Catat sistem, layanan, atau integrasi yang berhubungan dengan aplikasi.</p>
+              </div>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('interop') }}</span>
+          </div>
           
           <!-- Read-only mode: Show as badges -->
           <div v-if="readOnly">
             <div v-if="interops.length > 0 && interops[0]" class="platform-badges">
-              <span v-for="(interop, idx) in interops" :key="idx" class="badge badge-success">
+              <Badge v-for="(interop, idx) in interops" :key="idx" type="soft" variant="success" size="md">
                 {{ interop }}
-              </span>
+              </Badge>
             </div>
             <p v-else class="empty-text">
               Belum ada data interoperabilitas.
@@ -388,41 +488,58 @@ function close() {
             <div v-if="interops.length > 0" class="platform-badges-editable">
               <span v-for="interop in interops" :key="interop" class="badge badge-success badge-removable">
                 {{ interop }}
-                <button type="button" class="badge-remove-btn" @click="removeInterop(interop)" title="Hapus">
-                  <Icons name="x" :size="12" />
-                </button>
+                <Tooltip :title="`Hapus ${interop}`" placement="top">
+                  <Button hierarchy="custom" size="sm" class="badge-remove-btn" :prefix-icon="IconX" :aria-label="`Hapus ${interop}`" @click="removeInterop(interop)" />
+                </Tooltip>
               </span>
             </div>
             <p v-else class="badge-empty-hint">Belum ada interoperabilitas</p>
             
             <!-- Add new interop input -->
             <div v-if="props.mode !== 'removeOnly'" class="interop-add-group">
-              <input 
-                type="text" 
-                v-model="newInterop" 
+              <TextField
+                v-model="newInterop"
+                label="Tambah interoperabilitas"
+                placeholder="Contoh: SSO Instansi"
+                :max-length="100"
+                size="md"
                 @keyup.enter="addInterop"
-                placeholder="Ketik nama interoperabilitas..."
-                maxlength="100"
-                aria-label="Tambah interoperabilitas"
-                class="interop-input"
               />
-              <button type="button" class="btn-add-small" @click="addInterop" :disabled="!newInterop || !newInterop.trim()">
-                <Icons name="plus" :size="14" />
-              </button>
+              <Tooltip title="Tambahkan interoperabilitas" placement="top">
+                <Button
+                  hierarchy="secondary"
+                  size="lg"
+                  :prefix-icon="IconPlus"
+                  :disabled="!newInterop || !newInterop.trim()"
+                  aria-label="Tambahkan interoperabilitas"
+                  @click="addInterop"
+                />
+              </Tooltip>
             </div>
           </div>
-        </div>
+        </section>
 
         <!-- Storage Section -->
-        <div v-if="!props.focusSection || props.focusSection==='storage'" class="detail-section">
-          <h4>Storage</h4>
+        <section v-if="!props.focusSection || props.focusSection==='storage'" id="analisa-section-storage" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="server" :size="18" />
+              </span>
+              <div>
+                <h4>Storage</h4>
+                <p>Pilih jenis penyimpanan data, dokumen, atau objek aplikasi.</p>
+              </div>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('storage') }}</span>
+          </div>
           
           <!-- Read-only mode: Show as badges -->
           <div v-if="readOnly">
             <div v-if="storages.length > 0 && storages[0]" class="platform-badges">
-              <span v-for="(storage, idx) in storages" :key="idx" class="badge badge-warning">
-                {{ storage === 'db' ? 'Database' : storage === 'object-storage' ? 'Object Storage' : storage === 'cache' ? 'Cache' : storage }}
-              </span>
+              <Badge v-for="(storage, idx) in storages" :key="idx" type="soft" variant="warning" size="md">
+                {{ formatStorageLabel(storage) }}
+              </Badge>
             </div>
             <p v-else class="empty-text">
               Belum ada data storage.
@@ -434,36 +551,50 @@ function close() {
             <!-- Selected storages with X button -->
             <div v-if="storages.length > 0" class="platform-badges-editable">
               <span v-for="storage in storages" :key="storage" class="badge badge-warning badge-removable">
-                {{ storage === 'db' ? 'Database' : storage === 'object-storage' ? 'Object Storage' : storage === 'cache' ? 'Cache' : storage }}
-                <button type="button" class="badge-remove-btn" @click="removeStorage(storage)" title="Hapus">
-                  <Icons name="x" :size="12" />
-                </button>
+                {{ formatStorageLabel(storage) }}
+                <Tooltip :title="`Hapus ${formatStorageLabel(storage)}`" placement="top">
+                  <Button hierarchy="custom" size="sm" class="badge-remove-btn" :prefix-icon="IconX" :aria-label="`Hapus ${formatStorageLabel(storage)}`" @click="removeStorage(storage)" />
+                </Tooltip>
               </span>
             </div>
             <p v-else class="badge-empty-hint">Belum ada storage yang dipilih</p>
             
             <!-- Add new storage dropdown -->
-            <div v-if="props.mode !== 'removeOnly'" class="platform-add-group">
-              <select v-model="newStorage" @change="handleAddStorage" class="platform-select">
-                <option value="" disabled>+ Tambah Storage</option>
-                <option v-for="storageType in availableStorageTypes" :key="storageType" :value="storageType" :disabled="storages.includes(storageType)">
-                  {{ storageType === 'db' ? 'Database' : storageType === 'object-storage' ? 'Object Storage' : storageType === 'cache' ? 'Cache' : storageType }}
-                </option>
-              </select>
-            </div>
+            <IddsSelect
+              v-if="props.mode !== 'removeOnly'"
+              :model-value="newStorage"
+              label="Tambah storage"
+              :options="storageOptions.map((option) => ({ ...option, disabled: storages.includes(option.value) }))"
+              placeholder="Pilih jenis storage"
+              size="md"
+              width="100%"
+              panel-width="100%"
+              @update:model-value="selectStorage"
+            />
           </div>
-        </div>
+        </section>
 
         <!-- Aktor Section -->
-        <div v-if="!props.focusSection || props.focusSection==='aktor'" class="detail-section">
-          <h4>Aktor</h4>
+        <section v-if="!props.focusSection || props.focusSection==='aktor'" id="analisa-section-aktor" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="user" :size="18" />
+              </span>
+              <div>
+                <h4>Aktor</h4>
+                <p>Daftarkan aktor atau peran yang menggunakan fitur aplikasi.</p>
+              </div>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('aktor') }}</span>
+          </div>
           
           <!-- Read-only mode: Show as badges -->
           <div v-if="readOnly">
             <div v-if="aktors.length > 0" class="platform-badges">
-              <span v-for="(aktor, idx) in aktors" :key="idx" class="badge badge-info">
+              <Badge v-for="(aktor, idx) in aktors" :key="idx" type="soft" variant="info" size="md">
                 {{ aktor }}
-              </span>
+              </Badge>
             </div>
             <p v-else class="empty-text">
               Belum ada data aktor.
@@ -476,34 +607,50 @@ function close() {
             <div v-if="aktors.length > 0" class="platform-badges-editable">
               <span v-for="aktor in aktors" :key="aktor" class="badge badge-info badge-removable">
                 {{ aktor }}
-                <button type="button" class="badge-remove-btn" @click="removeAktor(aktor)" title="Hapus">
-                  <Icons name="x" :size="12" />
-                </button>
+                <Tooltip :title="`Hapus ${aktor}`" placement="top">
+                  <Button hierarchy="custom" size="sm" class="badge-remove-btn" :prefix-icon="IconX" :aria-label="`Hapus ${aktor}`" @click="removeAktor(aktor)" />
+                </Tooltip>
               </span>
             </div>
             <p v-else class="badge-empty-hint">Belum ada aktor yang dipilih</p>
             
             <!-- Add new aktor input -->
             <div v-if="props.mode !== 'removeOnly'" class="interop-add-group">
-              <input
-                type="text"
+              <TextField
                 v-model="newAktor"
-                @keyup.enter="handleAddAktor"
-                placeholder="Ketik nama aktor spesifik..."
-                maxlength="100"
-                aria-label="Tambah aktor"
-                class="interop-input"
+                label="Tambah aktor"
+                placeholder="Contoh: Operator Unit Kerja"
+                :max-length="100"
+                size="md"
               />
-              <button type="button" class="btn-add-small" @click="handleAddAktor" :disabled="!newAktor || !newAktor.trim()">
-                <Icons name="plus" :size="14" />
-              </button>
+              <Tooltip title="Tambahkan aktor" placement="top">
+                <Button
+                  hierarchy="secondary"
+                  size="lg"
+                  :prefix-icon="IconPlus"
+                  :disabled="!newAktor || !newAktor.trim()"
+                  aria-label="Tambahkan aktor"
+                  @click="handleAddAktor"
+                />
+              </Tooltip>
             </div>
           </div>
-        </div>
+        </section>
 
         <!-- Transaksi Section -->
-        <div v-if="(!props.focusSection || props.focusSection==='transaksi') && !props.hideTransaksi" class="detail-section">
-          <h4>Transaksi</h4>
+        <section v-if="(!props.focusSection || props.focusSection==='transaksi') && !props.hideTransaksi" id="analisa-section-transaksi" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="code" :size="18" />
+              </span>
+              <div>
+                <h4>Transaksi</h4>
+                <p>Kelola endpoint atau transaksi API penting yang menjadi bagian desain.</p>
+              </div>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('transaksi') }}</span>
+          </div>
           
           <!-- Read-only mode: Show as cards -->
           <div v-if="readOnly">
@@ -533,95 +680,105 @@ function close() {
             <div v-for="(transaksi, idx) in transaksis" :key="idx" class="transaksi-item">
               <div class="transaksi-header">
                 <span class="transaksi-label">Transaksi {{ idx + 1 }}</span>
-                <button
-                  v-if="props.mode !== 'addOnly'"
-                  type="button"
-                  class="btn-icon-delete"
-                  @click="removeTransaksi(idx)"
-                  title="Hapus Transaksi"
-                >
-                  <Icons name="trash" :size="16" />
-                </button>
+                <Tooltip v-if="props.mode !== 'addOnly'" title="Hapus transaksi" placement="top">
+                  <Button
+                    hierarchy="secondary"
+                    size="sm"
+                    :prefix-icon="IconTrash"
+                    aria-label="Hapus transaksi"
+                    @click="removeTransaksi(idx)"
+                  />
+                </Tooltip>
               </div>
               <div class="form-row">
-                <div class="form-group">
-                  <label>Method</label>
-                  <select v-model="transaksi.method">
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>URL</label>
-                  <input 
-                    type="text" 
-                    v-model="transaksi.url" 
-                    placeholder="/api/..." 
-                    maxlength="255"
-                    pattern="^/.*"
-                    title="URL harus dimulai dengan garis miring (/)"
-                  />
-                  <small v-if="transaksi.url && !transaksi.url.startsWith('/')" class="form-hint error">
-                    URL harus dimulai dengan / (garis miring)
-                  </small>
-                </div>
+                <IddsSelect
+                  v-model="transaksi.method"
+                  label="Method"
+                  :options="methodOptions"
+                  size="md"
+                  width="100%"
+                  panel-width="100%"
+                />
+                <TextField
+                  v-model="transaksi.url"
+                  label="URL endpoint"
+                  placeholder="Contoh: /api/resource"
+                  :max-length="255"
+                  size="md"
+                  :status="transaksi.url && !transaksi.url.startsWith('/') ? 'error' : 'neutral'"
+                  :status-message="transaksi.url && !transaksi.url.startsWith('/') ? 'URL harus dimulai dengan garis miring (/).' : ''"
+                />
               </div>
               <div class="form-row">
-                <div class="form-group">
-                  <label>Tipe Resource</label>
-                  <select v-model="transaksi.tipe_resource">
-                    <option value="terbuka">Terbuka</option>
-                    <option value="tertutup">Tertutup</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Aktor</label>
-                  <input
-                    type="text"
-                    v-model="transaksi.aktor_transaksi"
-                    placeholder="Contoh: Operator Unit Kerja"
-                    maxlength="100"
-                  />
-                </div>
+                <IddsSelect
+                  v-model="transaksi.tipe_resource"
+                  label="Tipe resource"
+                  :options="resourceOptions"
+                  size="md"
+                  width="100%"
+                  panel-width="100%"
+                />
+                <TextField
+                  v-model="transaksi.aktor_transaksi"
+                  label="Aktor"
+                  placeholder="Contoh: Operator Unit Kerja"
+                  :max-length="100"
+                  size="md"
+                />
               </div>
             </div>
-            <button v-if="(!props.focusSection && props.mode==='full') || (props.focusSection==='transaksi' && props.mode!=='removeOnly')" type="button" class="btn-add-item" @click="addTransaksi">
-              <Icons name="plus" :size="14" />
-              Tambah Transaksi
-            </button>
+            <Button
+              v-if="(!props.focusSection && props.mode==='full') || (props.focusSection==='transaksi' && props.mode!=='removeOnly')"
+              hierarchy="secondary"
+              size="md"
+              :prefix-icon="IconPlus"
+              @click="addTransaksi"
+            >
+              Tambah transaksi
+            </Button>
           </div>
-        </div>
+        </section>
 
         <!-- Dokumen Laporan Section -->
-        <div v-if="!readOnly" class="detail-section">
-          <h4>Laporan Analisa Desain</h4>
-          <div class="upload-container">
-            <label class="custom-file-upload">
-              <input type="file" accept=".pdf,.doc,.docx" @change="handleFileSelect" class="file-input-hidden" />
-              <div class="upload-content">
-                <Icons name="upload-cloud" :size="24" class="upload-icon" />
-                <span class="upload-text">
-                  {{ selectedFile ? selectedFile.name : 'Pilih file PDF atau DOC' }}
-                </span>
-                <span v-if="!selectedFile" class="upload-subtext">Maksimal ukuran file 10MB</span>
+        <section v-if="!readOnly" id="analisa-section-dokumen" class="detail-section analysis-editor-card">
+          <div class="analysis-section-header">
+            <div class="analysis-section-title">
+              <span class="analysis-section-icon">
+                <Icons name="file-text" :size="18" />
+              </span>
+              <div>
+                <h4>Laporan Analisis Desain</h4>
+                <p>Unggah dokumen akhir sebagai bukti kelengkapan analisis desain.</p>
               </div>
-            </label>
-            <small class="form-hint">
-              Unggah laporan hasil analisa desain yang telah selesai disusun sebagai kelengkapan.
-            </small>
+            </div>
+            <span class="analysis-section-count">{{ getSectionStatusText('dokumen') }}</span>
           </div>
-        </div>
+          <SingleFileUpload
+            title="Pilih laporan analisis desain"
+            description="PDF, DOC, atau DOCX; maksimal 10 MB."
+            accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            :allowed-extensions="['pdf', 'doc', 'docx']"
+            :max-size="10 * 1024 * 1024"
+            :validate-magic-number="true"
+            :disabled="loading"
+            :status="selectedFile ? 'success' : 'idle'"
+            @change="handleFileSelect"
+            @remove="selectedFile = null"
+          />
+        </section>
 
         <div class="modal-actions">
-          <button type="button" @click="close" class="btn btn-secondary">{{ readOnly ? 'Tutup' : 'Batal' }}</button>
-          <button v-if="!readOnly" type="submit" class="btn" :disabled="loading">{{ loading ? 'Menyimpan...' : 'Simpan Perubahan' }}</button>
+          <Button hierarchy="secondary" size="lg" type="button" @click="close">
+            {{ readOnly ? 'Tutup' : 'Batal' }}
+          </Button>
+          <Button v-if="!readOnly" hierarchy="primary" size="lg" type="submit" :prefix-icon="IconDeviceFloppy" :disabled="loading">
+            {{ loading ? 'Menyimpan perubahan' : 'Simpan perubahan' }}
+          </Button>
+        </div>
         </div>
       </form>
       </div>
-    </div>
-  </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -629,27 +786,27 @@ function close() {
   width: min(1160px, calc(100vw - 48px));
   max-width: 1160px;
   max-height: calc(100vh - 48px);
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
 }
 
 .analisa-modal .modal-header {
   padding: 22px 28px;
   margin: 0;
-  border-bottom: 1px solid var(--notion-border);
+  border-bottom: 1px solid var(--ina-stroke-primary);
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(10px);
 }
 
 .analisa-modal .modal-header h3 {
   margin: 0;
-  color: var(--notion-text);
-  font-size: 20px;
-  font-weight: 750;
-  letter-spacing: 0;
-  line-height: 1.35;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-body-large-line);
 }
 
 .analisa-modal .close-btn {
@@ -657,10 +814,10 @@ function close() {
   height: 38px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: var(--notion-bg-secondary);
-  color: var(--notion-text-secondary);
-  font-size: 24px;
-  line-height: 1;
+  background: var(--ina-background-secondary);
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-heading-h5-size);
+  line-height: var(--idds-heading-h5-line);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -668,9 +825,9 @@ function close() {
 }
 
 .analisa-modal .close-btn:hover {
-  border-color: var(--notion-border);
-  color: var(--notion-text);
-  background: var(--notion-hover);
+  border-color: var(--ina-stroke-primary);
+  color: var(--ina-content-primary);
+  background: var(--ina-background-tertiary);
 }
 
 .analisa-modal .modal-body {
@@ -686,7 +843,7 @@ function close() {
 .analisa-design-form .detail-section {
   margin: 0;
   padding: 0 0 20px;
-  border-bottom: 1px solid var(--notion-border);
+  border-bottom: 1px solid var(--ina-stroke-primary);
 }
 
 .analisa-design-form .detail-section:last-of-type {
@@ -696,11 +853,11 @@ function close() {
 .analisa-design-form .detail-section h4 {
   margin: 0 0 14px;
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--notion-border);
-  color: var(--notion-blue);
-  font-size: 15px;
-  font-weight: 750;
-  line-height: 1.35;
+  border-bottom: 1px solid var(--ina-stroke-primary);
+  color: var(--ina-primary-primary);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-body-small-line);
 }
 
 .platform-badges,
@@ -724,9 +881,9 @@ function close() {
   max-width: 100%;
   padding: 6px 8px 6px 10px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .badge-remove-btn {
@@ -750,10 +907,11 @@ function close() {
 
 .badge-empty-hint,
 .empty-text {
-  color: var(--notion-text-secondary);
-  font-size: 13.5px;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
   margin: 4px 0 0;
   font-style: italic;
+  line-height: var(--idds-caption-line);
 }
 
 .modal-actions {
@@ -762,10 +920,10 @@ function close() {
   margin: 0;
   padding-top: 18px;
   gap: 10px;
-  border-top: 1px solid var(--notion-border);
+  border-top: 1px solid var(--ina-stroke-primary);
   position: sticky;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.9), #fff);
+  background: var(--ina-background-primary);
   z-index: 2;
 }
 
@@ -783,12 +941,12 @@ function close() {
   width: 100%;
   min-height: 42px;
   padding: 9px 12px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 8px;
-  background: var(--notion-bg-secondary);
-  color: var(--notion-text);
-  font-size: 14px;
-  line-height: 1.4;
+  background: var(--ina-background-secondary);
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
@@ -797,7 +955,7 @@ function close() {
 .interop-input:focus,
 .analisa-design-form input:focus,
 .analisa-design-form select:focus {
-  border-color: var(--notion-blue);
+  border-color: var(--ina-primary-primary);
   background: #fff;
   box-shadow: 0 0 0 3px rgba(31, 63, 147, 0.12);
 }
@@ -807,7 +965,7 @@ function close() {
   height: 42px;
   border: 0;
   border-radius: 8px;
-  background: var(--notion-blue);
+  background: var(--ina-primary-primary);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -834,19 +992,20 @@ function close() {
 }
 
 .form-group label {
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-caption-small-line);
 }
 
 .transaksi-item,
 .transaksi-item-readonly {
   padding: 16px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg-secondary);
+  background: var(--ina-background-secondary);
   margin-bottom: 12px;
 }
 
@@ -865,35 +1024,38 @@ function close() {
 }
 
 .transaksi-label {
-  font-size: 13px;
-  font-weight: 750;
-  color: var(--notion-text);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .transaksi-url {
-  color: var(--notion-text);
+  color: var(--ina-content-primary);
   background: #fff;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: 12.5px;
+  font-size: var(--idds-caption-small-size);
   word-break: break-all;
+  line-height: var(--idds-caption-small-line);
 }
 
 .transaksi-meta {
   margin-top: 10px;
-  color: var(--notion-text-secondary);
-  font-size: 13px;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .btn-icon-delete {
   width: 34px;
   height: 34px;
   padding: 0;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 8px;
   background: #fff;
-  color: var(--notion-red);
+  color: var(--ina-negative-600);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -907,11 +1069,11 @@ function close() {
 
 .btn-add-item {
   min-height: 40px;
-  border: 1px dashed var(--notion-border);
+  border: 1px dashed var(--ina-stroke-primary);
   border-radius: 8px;
-  background: var(--notion-bg-secondary);
-  color: var(--notion-blue);
-  font-weight: 700;
+  background: var(--ina-background-secondary);
+  color: var(--ina-primary-primary);
+  font-weight: var(--idds-weight-bold);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -920,23 +1082,25 @@ function close() {
 }
 
 .input-error {
-  border-color: var(--notion-red);
+  border-color: var(--ina-negative-600);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
 .field-error {
   margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--notion-red);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-negative-600);
+  line-height: var(--idds-caption-small-line);
 }
 
 .form-hint {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .form-hint.error {
-  color: var(--notion-red);
+  color: var(--ina-negative-600);
 }
 
 .upload-container {
@@ -945,17 +1109,17 @@ function close() {
 
 .custom-file-upload {
   display: block;
-  border: 1px dashed var(--notion-border);
+  border: 1px dashed var(--ina-stroke-primary);
   border-radius: 10px;
   padding: 24px;
   text-align: center;
   cursor: pointer;
-  background-color: var(--notion-bg-secondary);
+  background-color: var(--ina-background-secondary);
   transition: all 0.2s ease;
 }
 
 .custom-file-upload:hover {
-  border-color: var(--notion-blue);
+  border-color: var(--ina-primary-primary);
   background-color: rgba(35, 131, 226, 0.05);
 }
 
@@ -971,22 +1135,24 @@ function close() {
 }
 
 .upload-icon {
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .custom-file-upload:hover .upload-icon {
-  color: var(--notion-blue);
+  color: var(--ina-primary-primary);
 }
 
 .upload-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--notion-text-primary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-medium);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .upload-subtext {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 @media (max-width: 768px) {
@@ -1012,6 +1178,354 @@ function close() {
 
   .modal-actions .btn {
     width: 100%;
+  }
+}
+
+/* Modern analysis editor layout */
+.analisa-modal {
+  width: min(1180px, calc(100vw - 48px));
+  height: min(860px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dbe3ef;
+  background: #f7f9fc;
+}
+
+.analisa-modal-header {
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 20px 24px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03) !important;
+}
+
+.analisa-title-block {
+  min-width: 0;
+}
+
+.analisa-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-caption-small-line);
+  text-transform: uppercase;
+}
+
+.analisa-title-block h3 {
+  color: #0f172a !important;
+  font-size: var(--idds-heading-h5-size) !important;
+  font-weight: var(--idds-weight-bold) !important;
+  letter-spacing: var(--idds-letter-spacing) !important;
+  line-height: var(--idds-heading-h5-line) !important;
+}
+
+.analisa-title-block p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
+}
+
+.analisa-modal .close-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0;
+}
+
+.analisa-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px 22px 0 !important;
+  overflow: auto;
+  background: #f7f9fc;
+}
+
+.analisa-loading {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #64748b;
+}
+
+.analisa-design-form {
+  display: block !important;
+  min-height: 100%;
+}
+
+.analisa-form-panels {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding-bottom: 0;
+}
+
+.analisa-design-form .analysis-editor-card {
+  scroll-margin-top: 18px;
+  margin: 0 !important;
+  padding: 18px !important;
+  border: 1px solid #dbe3ef !important;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.045);
+}
+
+.analysis-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.analysis-section-title {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.analysis-section-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #eef4ff;
+  color: #1e3a8a;
+}
+
+.analisa-design-form .analysis-editor-card h4 {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  color: #0f172a !important;
+  font-size: var(--idds-body-small-size) !important;
+  font-weight: var(--idds-weight-bold) !important;
+  line-height: var(--idds-body-small-line) !important;
+}
+
+.analysis-section-title p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
+}
+
+.analysis-section-count {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  white-space: nowrap;
+  line-height: var(--idds-caption-small-line);
+}
+
+.platform-badges,
+.platform-badges-editable {
+  min-height: 0;
+  gap: 8px;
+}
+
+.badge-section-edit {
+  gap: 12px;
+}
+
+.badge-removable {
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.badge-empty-hint,
+.empty-text {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: var(--idds-caption-size);
+  font-style: normal;
+  line-height: var(--idds-caption-line);
+}
+
+.platform-add-group,
+.interop-add-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+.platform-add-group {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.platform-select,
+.interop-input,
+.analisa-design-form input,
+.analisa-design-form select {
+  min-height: 44px;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.btn-add-small {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(30, 58, 138, 0.14);
+}
+
+.transaksi-item,
+.transaksi-item-readonly {
+  border-color: #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.transaksi-label {
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-line);
+}
+
+.btn-add-item {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  border-color: #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.custom-file-upload {
+  padding: 18px;
+  border-color: #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.upload-content {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  gap: 4px 12px;
+  text-align: left;
+}
+
+.upload-icon {
+  grid-row: span 2;
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #eef4ff;
+  color: #1e3a8a;
+}
+
+.upload-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: var(--idds-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin-top: 2px;
+  padding: 14px 0 16px;
+  border-top: 1px solid #e2e8f0;
+  background: var(--ina-background-primary);
+}
+
+.modal-actions .btn {
+  min-height: 44px;
+  border-radius: 10px;
+  font-weight: var(--idds-weight-bold);
+}
+
+.modal-actions .btn:not(.btn-secondary) {
+  background: #1e3a8a;
+  color: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .analisa-modal {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .analisa-modal-body {
+    padding: 14px 14px 0 !important;
+  }
+
+  .modal-actions {
+    padding-bottom: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .analisa-modal-header {
+    padding: 16px !important;
+  }
+
+  .analisa-title-block h3 {
+    font-size: var(--idds-body-size) !important;
+    line-height: var(--idds-body-line) !important;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-section-header {
+    flex-direction: column;
+  }
+
+  .analysis-section-count {
+    align-self: flex-start;
+  }
+
+  .upload-content {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .upload-icon {
+    grid-row: auto;
   }
 }
 </style>

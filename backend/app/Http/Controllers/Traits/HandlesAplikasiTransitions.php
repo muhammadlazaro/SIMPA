@@ -7,6 +7,7 @@ use App\Http\Helpers\ApiResponse;
 use App\Models\Aplikasi;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 trait HandlesAplikasiTransitions
 {
@@ -158,23 +159,75 @@ trait HandlesAplikasiTransitions
     {
         $user = $request->user();
         if ($user->role !== 'tim_uji_keamanan') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_UJI_KEAMANAN) return ApiResponse::error('Status tidak sesuai.');
 
-        $request->validate(['is_lolos' => 'required|boolean', 'catatan' => 'required|string']);
-        if (! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::LaporanUjiKeamanan)) {
-            return ApiResponse::error('Laporan uji keamanan wajib diunggah sebelum hasil uji keamanan disimpan.', null, 422);
-        }
+        $payload = $request->validate([
+            'is_lolos' => ['required', 'boolean'],
+            'catatan' => ['required', 'string', 'max:4000'],
+            'security_test_notes' => ['nullable', 'string', 'max:4000'],
+            'note' => ['nullable', 'string', 'max:4000'],
+        ]);
 
-        $statusBaru = $request->boolean('is_lolos') ? Aplikasi::STATUS_SIAP_DEPLOY : Aplikasi::STATUS_PERBAIKAN_KEAMANAN;
-        
-        $aplikasi->security_test_passed = $request->boolean('is_lolos');
-        $aplikasi->security_tested_by = $user->getKey();
-        $aplikasi->security_tested_at = now();
-        // save triggered inside recordStatusHistory
-        
-        $this->recordStatusHistory($aplikasi, 'Hasil Uji Keamanan', $statusBaru, $request->input('catatan'), $user);
+        return DB::transaction(function () use ($aplikasi, $payload, $user): JsonResponse {
+            $lockedAplikasi = Aplikasi::query()
+                ->whereKey($aplikasi->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return ApiResponse::success(['status' => $statusBaru], 'Hasil Uji Keamanan disimpan.');
+            if (
+                $lockedAplikasi->status !== Aplikasi::STATUS_UJI_KEAMANAN
+                || $lockedAplikasi->security_test_passed !== null
+            ) {
+                return ApiResponse::error(
+                    'Keputusan uji keamanan sudah disimpan dan tidak dapat dikirim ulang.',
+                    null,
+                    422
+                );
+            }
+
+            if (! $this->hasActiveDocument($lockedAplikasi, AplikasiJenisDokumen::LaporanUjiKeamanan)) {
+                return ApiResponse::error(
+                    'Laporan uji keamanan wajib diunggah sebelum hasil uji keamanan disimpan.',
+                    null,
+                    422
+                );
+            }
+
+            $isLolos = (bool) $payload['is_lolos'];
+            $summary = trim((string) ($payload['security_test_notes'] ?? $payload['catatan']));
+            $improvementNote = trim((string) ($payload['note'] ?? ''));
+            $statusBaru = $isLolos
+                ? Aplikasi::STATUS_SIAP_DEPLOY
+                : Aplikasi::STATUS_PERBAIKAN_KEAMANAN;
+
+            $lockedAplikasi->security_test_passed = $isLolos;
+            $lockedAplikasi->security_test_notes = $summary;
+            $lockedAplikasi->security_tested_by = $user->getKey();
+            $lockedAplikasi->security_tested_at = now();
+
+            $historyText = "Ringkasan Hasil Uji:\n{$summary}";
+            if ($improvementNote !== '') {
+                $historyText .= "\n\nCatatan Perbaikan:\n{$improvementNote}";
+            }
+
+            $lockedAplikasi->notes()->create([
+                'note_type' => 'uji_keamanan',
+                'body' => $historyText,
+                'created_by' => $user->getKey(),
+            ]);
+
+            $this->recordStatusHistory(
+                $lockedAplikasi,
+                'Hasil Uji Keamanan',
+                $statusBaru,
+                $payload['catatan'],
+                $user
+            );
+
+            return ApiResponse::success(
+                ['status' => $statusBaru],
+                'Hasil Uji Keamanan disimpan.'
+            );
+        });
     }
 
     public function selesaiPerbaikanKeamanan(Request $request, Aplikasi $aplikasi): JsonResponse
@@ -184,6 +237,10 @@ trait HandlesAplikasiTransitions
         if ($aplikasi->status !== Aplikasi::STATUS_PERBAIKAN_KEAMANAN) return ApiResponse::error('Status bukan perbaikan keamanan.');
 
         $request->validate(['catatan' => 'required|string']);
+        $aplikasi->security_test_passed = null;
+        $aplikasi->security_test_notes = null;
+        $aplikasi->security_tested_by = null;
+        $aplikasi->security_tested_at = null;
         $this->recordStatusHistory($aplikasi, 'Perbaikan Keamanan Selesai', Aplikasi::STATUS_UJI_KEAMANAN, $request->input('catatan'), $user);
 
         return ApiResponse::success(['status' => Aplikasi::STATUS_UJI_KEAMANAN], 'Perbaikan Keamanan selesai disubmit.');

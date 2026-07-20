@@ -57,7 +57,16 @@ class AplikasiWorkflowController extends Controller
                 ->orderBy('id')
                 ->get(),
             'notes' => $aplikasi->notes()
-                ->with(['creator:id,name', 'checker:id,name'])
+                ->whereNull('parent_id')
+                ->with([
+                    'creator:id,name,role',
+                    'checker:id,name',
+                    'replies.creator:id,name,role',
+                ])
+                ->oldest('id')
+                ->get(),
+            'histories' => $aplikasi->statusHistories()
+                ->with('changer:id,name')
                 ->latest('id')
                 ->get(),
         ]);
@@ -115,13 +124,29 @@ class AplikasiWorkflowController extends Controller
 
         $user = $request->user();
         $userId = $user instanceof User ? (int) $user->getKey() : null;
+        $parentId = null;
+
+        if ($request->filled('parent_id')) {
+            $parent = $aplikasi->notes()
+                ->whereKey($request->integer('parent_id'))
+                ->first();
+
+            if (! $parent) {
+                return ApiResponse::error('Catatan yang dibalas tidak ditemukan.', null, 422);
+            }
+
+            // Keep discussions easy to scan by limiting the visual hierarchy to one reply level.
+            $parentId = $parent->getAttribute('parent_id') ?: $parent->getKey();
+        }
+
         $note = $aplikasi->notes()->create([
+            'parent_id' => $parentId,
             'note_type' => $request->input('note_type', 'perbaikan'),
             'body' => $request->input('body'),
             'created_by' => $userId,
         ]);
 
-        $note->load(['creator:id,name', 'checker:id,name']);
+        $note->load(['creator:id,name,role', 'checker:id,name']);
 
         return ApiResponse::created(['note' => $note], 'Catatan berhasil ditambahkan');
     }
@@ -140,6 +165,17 @@ class AplikasiWorkflowController extends Controller
         $user = $request->user();
         $userId = $user instanceof User ? (int) $user->getKey() : null;
 
+        if (
+            (array_key_exists('body', $payload) || array_key_exists('note_type', $payload))
+            && (int) $note->getAttribute('created_by') !== $userId
+        ) {
+            return ApiResponse::forbidden('Anda hanya dapat mengubah catatan yang Anda buat sendiri.');
+        }
+
+        if (array_key_exists('body', $payload)) {
+            $payload['edited_at'] = now();
+        }
+
         if (array_key_exists('is_checked', $payload)) {
             if ((bool) $payload['is_checked']) {
                 $payload['checked_by'] = $userId;
@@ -151,7 +187,7 @@ class AplikasiWorkflowController extends Controller
         }
 
         $note->fill($payload)->save();
-        $note->load(['creator:id,name', 'checker:id,name']);
+        $note->load(['creator:id,name,role', 'checker:id,name']);
 
         return ApiResponse::success(['note' => $note], 'Catatan berhasil diperbarui');
     }
@@ -164,6 +200,10 @@ class AplikasiWorkflowController extends Controller
 
         if ((int) $note->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
             return ApiResponse::notFound('Catatan tidak ditemukan');
+        }
+
+        if ((int) $note->getAttribute('created_by') !== (int) $request->user()?->getKey()) {
+            return ApiResponse::forbidden('Anda hanya dapat menghapus catatan yang Anda buat sendiri.');
         }
 
         $note->delete();
@@ -261,6 +301,26 @@ class AplikasiWorkflowController extends Controller
         return ApiResponse::success(['checklist' => $checklist], 'Progress berhasil diperbarui');
     }
 
+    public function implementationDestroy(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
+    {
+        if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            return ApiResponse::notFound('Checklist tidak ditemukan');
+        }
+
+        $user = $request->user();
+        $category = $this->implementationCategoryForUser($user);
+        if ($category === null || (string) $checklist->getAttribute('category') !== $category) {
+            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        }
+        if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
+            return ApiResponse::error('Checklist implementasi belum dapat diubah pada tahap aplikasi saat ini.', null, 422);
+        }
+
+        $checklist->delete();
+
+        return ApiResponse::success(null, 'Item checklist berhasil dihapus');
+    }
+
     public function securityReviewShow(Aplikasi $aplikasi): JsonResponse
     {
         $aplikasi->loadMissing(['securityTester:id,name']);
@@ -292,7 +352,6 @@ class AplikasiWorkflowController extends Controller
         }
 
         $payload = $request->validate([
-            'security_test_passed' => ['required', 'boolean'],
             'security_test_notes' => ['nullable', 'string', 'max:4000'],
             'note' => ['nullable', 'string', 'max:4000'],
         ]);
@@ -300,10 +359,7 @@ class AplikasiWorkflowController extends Controller
         $user = $request->user();
         $userId = $user?->getKey();
 
-        $aplikasi->setAttribute('security_test_passed', (bool) $payload['security_test_passed']);
         $aplikasi->setAttribute('security_test_notes', $payload['security_test_notes'] ?? null);
-        $aplikasi->setAttribute('security_tested_by', $userId);
-        $aplikasi->setAttribute('security_tested_at', now());
         $aplikasi->save();
 
         $historyText = '';
@@ -352,7 +408,10 @@ class AplikasiWorkflowController extends Controller
             }
         }
 
-        $existingCount = $aplikasi->checklists()->where('category', $category)->count();
+        $existingCount = $aplikasi->checklists()
+            ->withTrashed()
+            ->where('category', $category)
+            ->count();
         if ($existingCount > 0) {
             return;
         }

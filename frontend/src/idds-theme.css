@@ -1,0 +1,509 @@
+/* SIMPA application theme mapped to INA Digital Design System foundations. */
+:root {
+  --ui-font: 'Inter', 'Segoe UI', sans-serif;
+  --ui-font-display: 'Inter', 'Segoe UI', sans-serif;
+
+  /* IDDS typography scale: display, heading, body, and caption. */
+  --idds-display-large-size: 52px;
+  --idds-display-large-line: 56px;
+  --idds-display-small-size: 44px;
+  --idds-display-small-line: 48px;
+  --idds-heading-h1-size: 40px;
+  --idds-heading-h1-line: 48px;
+  --idds-heading-h2-size: 36px;
+  --idds-heading-h2-line: 44px;
+  --idds-heading-h3-size: 32px;
+  --idds-heading-h3-line: 40px;
+  --idds-heading-h4-size: 28px;
+  --idds-heading-h4-line: 36px;
+  --idds-heading-h5-size: 24px;
+  --idds-heading-h5-line: 32px;
+  --idds-body-large-size: 20px;
+  --idds-body-large-line: 28px;
+  --idds-body-size: 18px;
+  --idds-body-line: 26px;
+  --idds-body-small-size: 16px;
+  --idds-body-small-line: 24px;
+  --idds-caption-size: 14px;
+  --idds-caption-line: 20px;
+  --idds-caption-small-size: 12px;
+  --idds-caption-small-line: 16px;
+  --idds-caption-xs-size: 10px;
+  --idds-caption-xs-line: 12px;
+  --idds-weight-regular: 400;
+  --idds-weight-medium: 500;
+  --idds-weight-semibold: 600;
+  --idds-weight-bold: 700;
+  --idds-letter-spacing: 0;
+
+  --ui-primary: var(--ina-primary-primary);
+  --ui-primary-hover: var(--ina-primary-600);
+  --ui-primary-soft: var(--ina-primary-50);
+  --ui-accent: var(--ina-warning-400);
+  --ui-bg: var(--ina-background-secondary);
+  --ui-canvas: var(--ina-background-secondary);
+  --ui-surface: var(--ina-background-primary);
+  --ui-surface-muted: var(--ina-background-secondary);
+  --ui-surface-soft: var(--ina-background-secondary);
+  --ui-text: var(--ina-content-primary);
+  --ui-text-strong: var(--ina-content-primary);
+  --ui-text-muted: var(--ina-content-secondary);
+  --ui-text-soft: var(--ina-content-tertiary);
+  --ui-border: var(--ina-stroke-primary);
+  --ui-border-strong: var(--ina-stroke-secondary);
+  --ui-success: var(--ina-positive-600);
+  --ui-warning: var(--ina-warning-600);
+  --ui-danger: var(--ina-negative-600);
+  --ui-info: var(--ina-blue-600);
+  --ui-radius-sm: var(--ina-radius-base);
+  --ui-radius-md: var(--ina-radius-lg);
+  --ui-radius-lg: var(--ina-radius-xl);
+  --ui-radius-xl: var(--ina-radius-2xl);
+  --ui-radius: var(--ina-radius-lg);
+  --ui-shadow-xs: var(--ina-shadow-sm);
+  --ui-shadow-sm: var(--ina-shadow-base);
+  --ui-shadow-md: var(--ina-shadow-md);
+  --ui-shadow-lg: var(--ina-shadow-lg);
+}
+
+html,
+body,
+#app,
+button,
+input,
+select,
+textarea {
+  font-family: 'Inter', sans-serif !important;
+  letter-spacing: var(--idds-letter-spacing);
+}
+
+body {
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-regular);
+  line-height: var(--idds-body-small-line);
+}
+
+#app h1 {
+  font-size: var(--idds-heading-h4-size);
+  line-height: var(--idds-heading-h4-line);
+}
+
+#app h2 {
+  font-size: var(--idds-heading-h5-size);
+  line-height: var(--idds-heading-h5-line);
+}
+
+#app h3 {
+  font-size: var(--idds-body-large-size);
+  line-height: var(--idds-body-large-line);
+}
+
+#app h4 {
+  font-size: var(--idds-body-size);
+  line-height: var(--idds-body-line);
+}
+
+#app p,
+#app li,
+#app td,
+#app input,
+#app select,
+#app textarea {
+  line-height: var(--idds-body-small-line);
+}
+
+body,
+#app .main-content {
+  color: var(--ina-content-primary);
+  background: var(--ina-background-secondary) !important;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-duration: var(--ina-transition-fast);
+}
+
+/* IDDS SingleFileUpload ships with a fixed 300px width. Keep every upload
+   control bounded by its form/card so the same component is responsive in
+   every role and workflow. */
+#app .ina-single-file-upload {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 72px;
+  box-sizing: border-box;
+}
+
+#app .ina-single-file-upload__container {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#app .ina-single-file-upload__content,
+#app .ina-single-file-upload__progress {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ui-button:focus-visible,
+.ui-icon-button:focus-visible,
+.ui-link-button:focus-visible,
+#app .sidebar-link:focus-visible,
+#app .header-icon-button:focus-visible,
+#app .collapse-toggle:focus-visible,
+#app .sidebar-account-trigger:focus-visible {
+  outline: 2px solid var(--ina-content-guide) !important;
+  outline-offset: 2px;
+}
+
+.ina-toast-container--top-middle {
+  top: 24px !important;
+  right: auto !important;
+  left: 50% !important;
+  width: min(420px, calc(100vw - 32px));
+  transform: translateX(-50%) !important;
+}
+
+.ina-toast-container--top-middle .ina-toast-item,
+.ina-toast-container--top-middle .ina-toast {
+  width: 100%;
+  max-width: 420px;
+}
+
+.ina-drawer__panel.simpa-confirmation-drawer {
+  max-width: 100vw;
+}
+
+.simpa-confirmation-drawer .ina-drawer__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.simpa-confirmation-drawer .ina-drawer__footer {
+  padding: var(--ina-spacing-4) var(--ina-spacing-6);
+}
+
+.ui-table-actions .ui-icon-action-cell {
+  margin-left: auto;
+}
+
+.ui-page-content,
+.app-detail-container {
+  gap: var(--ina-spacing-6);
+}
+
+.ui-panel,
+#app .card,
+#app .detail-tab-panel,
+#app .detail-info-card,
+#app .unit-doc-card,
+#app .security-review-card {
+  border-color: var(--ina-stroke-primary) !important;
+  border-radius: var(--ina-radius-xl) !important;
+  background: var(--ina-background-primary) !important;
+  box-shadow: var(--ina-shadow-sm) !important;
+}
+
+#app .workspace-hero-card,
+#app .uk-welcome-card,
+#app .detail-hero-card {
+  border-color: var(--ina-stroke-primary) !important;
+  border-top: 4px solid var(--ina-primary-primary) !important;
+  border-radius: var(--ina-radius-xl) !important;
+  background: var(--ina-background-primary) !important;
+  box-shadow: var(--ina-shadow-sm) !important;
+}
+
+.ui-button,
+#app .btn,
+#app .add-btn,
+#app .btn-export,
+#app .uk-welcome-btn,
+#app .detail-hero-refresh {
+  min-height: 40px;
+  border-radius: var(--ina-radius-lg) !important;
+  color: var(--ina-neutral-25) !important;
+  background: var(--ina-primary-primary) !important;
+  border-color: var(--ina-primary-primary) !important;
+  font-weight: var(--idds-weight-semibold) !important;
+}
+
+.ui-button:hover:not(:disabled),
+#app .btn:hover:not(:disabled),
+#app .add-btn:hover:not(:disabled),
+#app .btn-export:hover:not(:disabled) {
+  background: var(--ina-primary-600) !important;
+  border-color: var(--ina-primary-600) !important;
+}
+
+.ui-button.secondary,
+#app .btn-secondary,
+#app .btn-ghost,
+#app .btn-cancel,
+#app .btn-skip {
+  color: var(--ina-content-primary) !important;
+  background: var(--ina-background-primary) !important;
+  border-color: var(--ina-stroke-primary) !important;
+}
+
+.ui-button.secondary:hover:not(:disabled),
+#app .btn-secondary:hover:not(:disabled),
+#app .btn-ghost:hover:not(:disabled),
+#app .btn-cancel:hover:not(:disabled),
+#app .btn-skip:hover:not(:disabled) {
+  background: var(--ina-background-secondary) !important;
+  border-color: var(--ina-stroke-secondary) !important;
+}
+
+.ui-button.danger,
+#app .btn-danger {
+  color: var(--ina-negative-700) !important;
+  background: var(--ina-negative-50) !important;
+  border-color: var(--ina-negative-200) !important;
+}
+
+.ui-icon-button {
+  border-color: var(--ina-stroke-primary);
+  border-radius: var(--ina-radius-lg);
+  color: var(--ina-content-primary);
+  background: var(--ina-background-primary);
+}
+
+.ui-icon-button:hover {
+  border-color: var(--ina-stroke-secondary);
+  background: var(--ina-background-secondary);
+}
+
+.ui-table,
+#app .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ina-content-primary);
+  background: var(--ina-background-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
+}
+
+.ui-table th,
+#app .data-table thead th {
+  height: 48px;
+  padding: 0 16px !important;
+  border-bottom: 1px solid var(--ina-stroke-primary);
+  color: var(--ina-content-primary) !important;
+  background: var(--ina-background-primary) !important;
+  font-size: var(--idds-caption-size) !important;
+  font-weight: var(--idds-weight-medium) !important;
+  letter-spacing: var(--idds-letter-spacing) !important;
+  line-height: var(--idds-caption-line) !important;
+  text-align: left;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
+.ui-table td,
+#app .data-table td {
+  min-height: 56px;
+  padding: 12px 16px !important;
+  border-bottom-color: var(--ina-stroke-primary) !important;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
+  vertical-align: middle;
+}
+
+#app .table-wrap {
+  border: 1px solid var(--ina-stroke-primary) !important;
+  border-radius: var(--ina-radius-lg) !important;
+  background: var(--ina-background-primary);
+  box-shadow: none !important;
+}
+
+#app .data-table-row:nth-child(even) {
+  background: transparent !important;
+}
+
+#app .data-table-row:hover {
+  background: var(--ina-background-secondary) !important;
+}
+
+.badge,
+.ui-status-badge {
+  font-weight: var(--idds-weight-medium) !important;
+}
+
+#app .unit-doc-empty,
+#app .unit-doc-empty-hint {
+  color: var(--ina-content-secondary) !important;
+}
+
+#app .wizard-stepper .step-item {
+  color: var(--ina-content-secondary) !important;
+}
+
+#app .wizard-stepper .step-item.active,
+#app .wizard-stepper .step-item.completed {
+  color: var(--ina-content-primary) !important;
+}
+
+body .application-stepper.ina-stepper .ina-stepper__item .ina-stepper__label,
+body .ina-text-field__char-count {
+  color: var(--ina-content-secondary) !important;
+  font-size: var(--idds-caption-small-size) !important;
+  line-height: var(--idds-caption-small-line) !important;
+}
+
+body .application-stepper.ina-stepper .ina-stepper__item {
+  opacity: 1 !important;
+}
+
+body .application-stepper.ina-stepper .ina-stepper__item--active .ina-stepper__label {
+  color: var(--ina-primary-700) !important;
+}
+
+.badge-success {
+  color: var(--ina-positive-700) !important;
+  background: var(--ina-positive-100) !important;
+  border-color: var(--ina-positive-200) !important;
+}
+
+.badge-success::before {
+  background: var(--ina-positive-500) !important;
+}
+
+.badge-warning {
+  color: var(--ina-warning-700) !important;
+  background: var(--ina-warning-100) !important;
+  border-color: var(--ina-warning-200) !important;
+}
+
+.badge-warning::before {
+  background: var(--ina-warning-500) !important;
+}
+
+.badge-info {
+  color: var(--ina-blue-700) !important;
+  background: var(--ina-blue-100) !important;
+  border-color: var(--ina-blue-200) !important;
+}
+
+.badge-info::before {
+  background: var(--ina-blue-500) !important;
+}
+
+.badge-danger {
+  color: var(--ina-negative-700) !important;
+  background: var(--ina-negative-100) !important;
+  border-color: var(--ina-negative-200) !important;
+}
+
+.badge-danger::before {
+  background: var(--ina-negative-500) !important;
+}
+
+.badge-secondary,
+.badge-neutral {
+  color: var(--ina-content-secondary) !important;
+  background: var(--ina-background-secondary) !important;
+  border-color: var(--ina-stroke-primary) !important;
+}
+
+.checklist-checkbox-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checklist-checkbox-only .ina-checkbox__label,
+.checklist-checkbox-only .ina-checkbox__subtext {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.checklist-checkbox-only .ina-checkbox__box {
+  margin: 0;
+}
+
+#app .ina-breadcrumb__link--active > .ina-breadcrumb__text {
+  color: #4b4d4f !important;
+}
+
+#app .ina-breadcrumb__link--active.ina-breadcrumb__link--disabled {
+  opacity: 1;
+}
+
+#app h1,
+#app h2,
+#app h3,
+#app h4,
+#app .data-card-head h3,
+#app .section-title,
+#app .checklist-title {
+  font-family: var(--ui-font-display) !important;
+  font-weight: var(--idds-weight-semibold) !important;
+  letter-spacing: var(--idds-letter-spacing) !important;
+}
+
+#app .stat-label,
+#app .stat-value,
+#app .badge {
+  font-weight: var(--idds-weight-semibold) !important;
+}
+
+.modal-content,
+.modal-card {
+  border-color: var(--ina-stroke-primary) !important;
+  border-radius: var(--ina-radius-2xl) !important;
+  background: var(--ina-background-primary) !important;
+  box-shadow: var(--ina-shadow-xl) !important;
+}
+
+/* Global application shell: the white, left-aligned management layout from IDDS. */
+#app .app-sidebar .brand-logo {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+#app .app-workspace {
+  min-width: 0;
+  background: var(--ina-background-secondary);
+}
+
+#app .app-main {
+  min-height: calc(100vh - 64px);
+}
+
+@media (max-width: 768px) {
+  #app .data-table td {
+    min-height: 0;
+    padding: 8px 0 !important;
+  }
+
+  #app .app-detail-container {
+    padding-top: 16px !important;
+  }
+
+  #app .app-main {
+    min-height: calc(100vh - 56px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

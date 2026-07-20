@@ -123,6 +123,15 @@ class AplikasiWorkflowTest extends TestCase
                 'notes' => 'Tunggu umpan balik pengguna internal',
             ])->assertStatus(201)
             ->assertJsonPath('data.checklist.category', 'implementation_progress');
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->deleteJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists/{$checklistId}")
+            ->assertStatus(200);
+
+        $this->assertSoftDeleted('aplikasi_checklists', [
+            'id' => $checklistId,
+            'category' => 'implementation_progress',
+        ]);
     }
 
     public function test_devops_can_manage_devops_checklist_on_deployment_stage(): void
@@ -146,6 +155,15 @@ class AplikasiWorkflowTest extends TestCase
             ])->assertStatus(200)
             ->assertJsonPath('data.checklist.item_status', 'done')
             ->assertJsonPath('data.checklist.category', 'devops_progress');
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->deleteJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists/{$checklistId}")
+            ->assertStatus(200);
+
+        $this->assertSoftDeleted('aplikasi_checklists', [
+            'id' => $checklistId,
+            'category' => 'devops_progress',
+        ]);
     }
 
     public function test_implementation_checklist_is_isolated_by_role_category(): void
@@ -169,6 +187,10 @@ class AplikasiWorkflowTest extends TestCase
             ->patchJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists/{$frontendChecklist->id}", [
                 'item_status' => 'done',
             ])->assertStatus(403);
+
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$implementerToken)
+            ->deleteJson("/api/aplikasi/{$aplikasi->id}/implementation-checklists/{$frontendChecklist->id}")
+            ->assertStatus(403);
 
         $this->assertDatabaseHas('aplikasi_checklists', [
             'id' => $frontendChecklist->id,

@@ -1,14 +1,36 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
+import {
+  Accordion,
+  Alert,
+  Button,
+  Checkbox,
+  Modal,
+  SingleFileUpload,
+  TabHorizontal,
+  TextArea,
+  TextField,
+} from '@idds/vue'
+import {
+  IconCheck,
+  IconPlus,
+  IconRocket,
+  IconTrash,
+} from '@tabler/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import http from '../lib/http'
+import { resolveIddsFileSelection } from '../utils/fileUpload'
+import AsyncState from './AsyncState.vue'
+import ConfirmationDrawer from './ConfirmationDrawer.vue'
+import DiscussionThread from './DiscussionThread.vue'
 import Icons from './Icons.vue'
 import DetailInfoGrid from './DetailInfoGrid.vue'
+import PageHeader from './PageHeader.vue'
 import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
 import { getHomeByRole } from '../constants/roles'
 import { warnDev } from '../utils/logger'
-import { getHttpMethodClass, getShortStatusLabel } from '../constants/status'
+import { getShortStatusLabel } from '../constants/status'
 
 const props = defineProps({
   /** Halaman detail saat dibuka oleh role Analis Desain (layout Analis). */
@@ -32,6 +54,7 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 const app = ref(null)
 const activeTab = ref('informasi')
 const activeTechnicalConfigTab = ref('proyek')
@@ -50,7 +73,6 @@ const implementationTitleInput = ref(null)
 const implementationTitleLimit = 120
 const implementationNotesLimit = 240
 const loadingDeploymentStatus = ref(false)
-const savingDeploymentStatus = ref(false)
 const deploymentStatus = ref({
   staging: { deployed: false, deployed_at: null, deployed_by: null },
   production: { deployed: false, deployed_at: null, deployed_by: null },
@@ -66,24 +88,29 @@ const securityReview = ref({
   security_test_notes: '',
   security_tester: null,
 })
-const securityReviewForm = ref({
-  security_test_passed: null,
-  security_test_notes: '',
-  note: '',
-})
+const securityReviewForm = ref(createEmptySecurityReviewForm())
 const securityNotes = ref([])
+const isSecurityReviewEditable = computed(() => (
+  app.value?.status === 'uji_keamanan'
+  && securityReview.value.security_test_passed === null
+))
+
+function createEmptySecurityReviewForm(status = null) {
+  return {
+    security_test_passed: status,
+    security_test_notes: '',
+    note: '',
+  }
+}
 
 // ==== WORKFLOW (Checklist & Catatan) - untuk semua role selain unit_kerja ====
 const workflowLoading = ref(false)
 const workflowError = ref('')
 const checklistForm = ref({ title: '', notes: '' })
-const noteForm = ref({ body: '' })
 const savingChecklist = ref(false)
-const savingNote = ref(false)
 const updatingChecklistId = ref(null)
 const confirmingDeleteChecklist = ref(null)
-const confirmingDeleteNote = ref(null)
-const deletingNoteId = ref(null)
+const confirmingDeleteImplementationChecklist = ref(null)
 
 // ==== WORKFLOW ACTIONS ====
 const showActionModal = ref(false)
@@ -182,7 +209,7 @@ const availableActions = computed(() => {
       { label: 'Nyatakan Tidak Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: false }, btnClass: 'btn-danger', requiresNote: true }
     )
   } else if (role === 'analis_desain' && status === 'layak') {
-    actions.push({ label: 'Mulai Analisa Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false })
+    actions.push({ label: 'Mulai Analisis Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false })
   } else if (role === 'tim_implementasi_aplikasi' && status === 'analisa_desain') {
     actions.push({ label: 'Mulai Pengembangan', endpoint: '/workflow/mulai-pengembangan', btnClass: 'btn-primary', requiresNote: true })
   } else if (role === 'tim_implementasi_aplikasi' && status === 'pengembangan') {
@@ -273,19 +300,6 @@ async function submitDeactivateApp() {
   }
 }
 
-const basePath = computed(() => getHomeByRole(auth.role).path)
-/** Teks breadcrumb item kedua */
-const listBreadcrumbLabel = computed(() => {
-  if (props.analystMode) return 'Analisa & Desain'
-  if (props.securityMode) return 'Uji Keamanan Aplikasi'
-  if (auth.role === 'unit_kerja') return 'Pengajuan saya'
-  if (['tim_implementasi_aplikasi', 'devops_developer'].includes(auth.role || '')) return 'Kelola Aplikasi'
-  return 'Aplikasi'
-})
-/** Subjek untuk copy empty state (siapa yang mengisi analisa) */
-const whoFillsAnalisa = computed(() =>
-  props.analystMode ? 'Anda' : 'Analis desain'
-)
 let redirectTimer = null
 
 // ===== MASTER DOCUMENT SECTIONS =====
@@ -334,8 +348,8 @@ const MASTER_DOC_SECTIONS = [
   {
     type: 'laporan_analisa_desain',
     stage: 2,
-    title: 'Laporan Analisa Desain',
-    desc: 'Laporan hasil analisa desain dari tim analis.',
+    title: 'Laporan Analisis Desain',
+    desc: 'Laporan hasil analisis desain dari tim analis.',
     uploadRoles: ['analis_desain'],
     uploadStatuses: ['analisa_desain'],
   },
@@ -416,12 +430,10 @@ const documentPanelTitle = computed(() => 'Dokumen')
 const isImplementationRole = computed(() => auth.role === 'tim_implementasi_aplikasi')
 const isDevOpsRole = computed(() => auth.role === 'devops_developer' || props.devopsMode)
 const isPengelolaRole = computed(() => auth.role === 'pengelola_aplikasi' || props.pengelolaMode)
-const isNonUnitKerjaRole = computed(() => !props.unitKerjaMode && (props.analystMode || props.securityMode || props.devopsMode || props.implementationMode || props.pengelolaMode || isImplementationRole.value || isDevOpsRole.value || isPengelolaRole.value))
+const isNonUnitKerjaRole = computed(() => props.unitKerjaMode || auth.role === 'unit_kerja' || props.analystMode || props.securityMode || props.devopsMode || props.implementationMode || props.pengelolaMode || isImplementationRole.value || isDevOpsRole.value || isPengelolaRole.value)
 const isDocumentPanelMode = computed(() => props.unitKerjaMode || props.analystMode || props.securityMode || props.pengelolaMode || isImplementationRole.value || isDevOpsRole.value || isPengelolaRole.value)
 const canDeactivateApp = computed(() => isPengelolaRole.value && app.value?.status === 'deployed_production')
 const shouldLoadDocuments = computed(() => isDocumentPanelMode.value)
-const showTechnicalSections = computed(() => !props.unitKerjaMode && !props.securityMode && !props.analystMode)
-const showTabMenu = computed(() => true)
 const isImplementationContext = computed(() => isImplementationRole.value || isDevOpsRole.value || props.implementationMode)
 const canManageFeasibilityChecklist = computed(() => props.analystMode || auth.role === 'analis_desain')
 const showApplicationProgress = computed(() => props.unitKerjaMode || isPengelolaRole.value)
@@ -447,6 +459,14 @@ function canLoadImplementationChecklistNow() {
   return ['pengembangan', 'perbaikan_uat', 'perbaikan_keamanan'].includes(status)
 }
 
+function workflowButtonHierarchy(index) {
+  return index === 0 ? 'primary' : 'secondary'
+}
+
+function workflowButtonClass(action) {
+  return action?.btnClass === 'btn-danger' ? 'idds-danger-button' : ''
+}
+
 // Flat tabs for all roles
 const COMMON_TABS = [
   { id: 'informasi',  label: 'Informasi' },
@@ -457,6 +477,10 @@ const COMMON_TABS = [
 const MAIN_TABS_WITHOUT_CHECKLIST = COMMON_TABS.filter(tab => tab.id !== 'checklist')
 
 const availableMainTabs = computed(() => {
+  // Unit Kerja tetap membutuhkan informasi, riwayat keputusan, dan dokumen miliknya.
+  if (props.unitKerjaMode || auth.role === 'unit_kerja') {
+    return MAIN_TABS_WITHOUT_CHECKLIST
+  }
   // Pengelola Aplikasi: fokus pada informasi, progres, catatan, dan dokumen.
   if (props.pengelolaMode || isPengelolaRole.value) {
     return MAIN_TABS_WITHOUT_CHECKLIST
@@ -490,6 +514,21 @@ const availableMainTabs = computed(() => {
   return []
 })
 
+const mainTabItems = computed(() =>
+  availableMainTabs.value.map((tab) => ({ value: tab.id, label: tab.label }))
+)
+
+function setActiveMainTab(tabId) {
+  activeTab.value = tabId
+  router.replace({ query: { ...route.query, tab: tabId } })
+}
+
+function syncTabFromRoute() {
+  const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const allowedTabs = availableMainTabs.value.map((tab) => tab.id)
+  activeTab.value = allowedTabs.includes(requestedTab) ? requestedTab : (allowedTabs[0] || 'informasi')
+}
+
 /**
  * Apakah role saat ini dapat mengupload dokumen section ini sekarang?
  * Berdasarkan pemetaan uploadRoles + uploadStatuses di MASTER_DOC_SECTIONS.
@@ -498,6 +537,10 @@ function docSectionCanUploadNow(section) {
   if (!app.value || !section) return false
   return section.uploadRoles.includes(auth.role) &&
          section.uploadStatuses.includes(app.value?.status)
+}
+
+function canViewDocumentTemplate() {
+  return props.unitKerjaMode || auth.role === 'unit_kerja' || isPengelolaRole.value
 }
 
 function getDocumentEmptyHint(section) {
@@ -513,12 +556,6 @@ function getDocumentEmptyHint(section) {
   }
   return ''
 }
-const implementationRoleLabel = computed(() => {
-  if (auth.role === 'tim_implementasi_aplikasi') return 'Implementasi'
-  if (auth.role === 'devops_developer') return 'DevOps'
-  return 'Implementasi'
-})
-
 const implementationChecklistTitle = computed(() =>
   isDevOpsRole.value ? 'Checklist DevOps' : 'Checklist Implementasi'
 )
@@ -530,8 +567,11 @@ const implementationChecklistEmptyText = computed(() =>
 )
 
 onMounted(async () => {
+  syncTabFromRoute()
   await loadData()
 })
+
+watch(() => route.query.tab, syncTabFromRoute)
 
 // Watch for route changes (when navigating between different app details)
 watch(() => route.params.id, async (newId) => {
@@ -548,6 +588,7 @@ watch(() => route.params.id, async (newId) => {
 
 async function loadData() {
   loading.value = true
+  loadError.value = ''
   try {
     const { data } = await http.get(`/aplikasi/${route.params.id}`)
     app.value = data.data || data
@@ -573,6 +614,9 @@ async function loadData() {
       await Promise.all(jobs)
     }
   } catch (error) {
+    loadError.value = error.response?.status === 404
+      ? 'Aplikasi tidak ditemukan atau tidak lagi dapat Anda akses.'
+      : 'Detail aplikasi belum dapat dimuat. Periksa koneksi lalu coba lagi.'
     toastStore.push('Gagal memuat detail aplikasi. Silakan coba lagi.', 'error')
     // Redirect back to list if app not found
     if (error.response?.status === 404) {
@@ -617,69 +661,15 @@ async function loadSecurityReview() {
       security_test_notes: review.security_test_notes || '',
       security_tester: review.security_tester || null,
     }
-    securityReviewForm.value = {
-      security_test_passed: review.security_test_passed ?? null,
-      security_test_notes: review.security_test_notes || '',
-      note: '',
-    }
+    // Hasil lama tetap tersedia pada status dan riwayat. Form selalu menjadi
+    // input baru agar keputusan yang sudah dikirim tidak muncul sebagai draft.
+    securityReviewForm.value = createEmptySecurityReviewForm(review.security_test_passed ?? null)
     securityNotes.value = data?.data?.security_notes || []
   } catch (error) {
     const msg = error?.response?.data?.message || 'Gagal memuat data uji keamanan.'
     toastStore.push(msg, 'error')
   } finally {
     loadingSecurityReview.value = false
-  }
-}
-
-const securityNotesLimit = 500
-const securityNoteLimit = 300
-
-const securityReviewErrors = computed(() => {
-  const errors = []
-  if (securityReviewForm.value.security_test_passed === null) {
-    errors.push('Status uji keamanan wajib dipilih.')
-  }
-  const notes = securityReviewForm.value.security_test_notes?.trim() || ''
-  const note = securityReviewForm.value.note?.trim() || ''
-  if (notes.length > securityNotesLimit) {
-    errors.push(`Ringkasan hasil uji maksimal ${securityNotesLimit} karakter.`)
-  }
-  if (note.length > securityNoteLimit) {
-    errors.push(`Catatan perbaikan maksimal ${securityNoteLimit} karakter.`)
-  }
-  return errors
-})
-
-const canSaveSecurityReview = computed(() => securityReviewErrors.value.length === 0)
-
-const securityNotesRemaining = computed(() => {
-  const notes = securityReviewForm.value.security_test_notes || ''
-  return securityNotesLimit - notes.length
-})
-
-const securityNoteRemaining = computed(() => {
-  const note = securityReviewForm.value.note || ''
-  return securityNoteLimit - note.length
-})
-
-async function saveSecurityReview() {
-  if (!props.securityMode) return
-  if (!canSaveSecurityReview.value) return
-  savingSecurityReview.value = true
-  try {
-    await http.put(`/aplikasi/${route.params.id}/security-review`, {
-      security_test_passed: !!securityReviewForm.value.security_test_passed,
-      security_test_notes: securityReviewForm.value.security_test_notes?.trim() || null,
-      note: securityReviewForm.value.note?.trim() || null,
-    })
-    securityReviewForm.value.note = ''
-    await loadData()
-    toastStore.push('Hasil uji keamanan berhasil disimpan.', 'success')
-  } catch (error) {
-    const msg = error?.response?.data?.message || 'Gagal menyimpan hasil uji keamanan.'
-    toastStore.push(msg, 'error')
-  } finally {
-    savingSecurityReview.value = false
   }
 }
 
@@ -696,18 +686,13 @@ async function submitSecurityVerdict(isLolos) {
   }
   savingSecurityReview.value = true
   try {
-    // Simpan review detail
-    await http.put(`/aplikasi/${route.params.id}/security-review`, {
-      security_test_passed: isLolos,
-      security_test_notes: notes,
-      note: securityReviewForm.value.note?.trim() || null,
-    })
-    // Trigger workflow
     await http.post(`/aplikasi/${route.params.id}/workflow/hasil-uji-keamanan`, {
       is_lolos: isLolos,
       catatan: notes,
+      security_test_notes: notes,
+      note: securityReviewForm.value.note?.trim() || null,
     })
-    securityReviewForm.value.note = ''
+    securityReviewForm.value = createEmptySecurityReviewForm()
     toastStore.push(
       isLolos ? 'Aplikasi dinyatakan Lolos Uji Keamanan.' : 'Aplikasi dinyatakan Belum Lolos Uji Keamanan.',
       isLolos ? 'success' : 'warning'
@@ -741,31 +726,17 @@ async function loadDeploymentStatus() {
   }
 }
 
-async function updateDeploymentStatus(environment, isDeployed) {
-  if (!isDevOpsRole.value) return
-  savingDeploymentStatus.value = true
-  try {
-    await http.put(`/aplikasi/${route.params.id}/deployment-status`, {
-      environment,
-      deployed: isDeployed,
-      notes: deploymentStatus.value.notes?.trim() || null
-    })
-    if (isDeployed && app.value) {
-      app.value.status = environment === 'production' ? 'deployed_production' : 'deployed_staging'
-    }
-    await loadDeploymentStatus()
-    toastStore.push(`Status deployment ${environment} berhasil diperbarui.`, 'success')
-  } catch (error) {
-    const msg = error?.response?.data?.message || 'Gagal memperbarui status deployment.'
-    toastStore.push(msg, 'error')
-  } finally {
-    savingDeploymentStatus.value = false
+function selectDocumentFile(type, file, validation) {
+  const selection = resolveIddsFileSelection(file, validation, 'File tidak sesuai ketentuan.')
+  selectedFiles.value = { ...selectedFiles.value, [type]: selection.file }
+
+  if (selection.error) {
+    toastStore.push(selection.error, 'error')
   }
 }
 
-function selectDocumentFile(type, event) {
-  const file = event?.target?.files?.[0] || null
-  selectedFiles.value[type] = file
+function removeDocumentFile(type) {
+  selectedFiles.value = { ...selectedFiles.value, [type]: null }
 }
 
 function getLatestDoc(type) {
@@ -778,18 +749,6 @@ function getLatestDoc(type) {
 function hasActiveDocument(type) {
   return (documentsByType.value[type] || []).some((doc) => doc.status === 'active')
 }
-
-const latestAnalystReport = computed(() => getLatestDoc('laporan_analisa_desain'))
-
-const implementationAnalisaSummary = computed(() => {
-  const items = analisaDesains.value || []
-  const ui = [...new Set(items.filter((a) => a.ui_platform).map((a) => a.ui_platform))]
-  const interop = [...new Set(items.filter((a) => a.interop_type).map((a) => a.interop_type))]
-  const storage = [...new Set(items.filter((a) => a.storage_type).map((a) => a.storage_type))]
-  const aktor = [...new Set(items.filter((a) => a.nama_aktor).map((a) => a.nama_aktor))]
-  const transaksi = items.filter((a) => a.method && a.url).length
-  return { ui, interop, storage, aktor, transaksi }
-})
 
 const implementationChecklistStats = computed(() => {
   const list = implementationChecklistItems.value || []
@@ -829,6 +788,36 @@ const canAddImplementationItem = computed(() => !implementationTitleError.value 
 function getDocHistory(type) {
   const list = documentsByType.value[type] || []
   return [...list].sort((a, b) => (b.version || 0) - (a.version || 0))
+}
+
+async function openDocumentInNewTab(document) {
+  if (!document?.preview_url) {
+    toastStore.push('Dokumen belum dapat dibuka.', 'warning')
+    return
+  }
+
+  const documentTab = window.open('about:blank', '_blank')
+  if (!documentTab) {
+    toastStore.push('Izinkan pop-up browser untuk membuka dokumen.', 'warning')
+    return
+  }
+
+  documentTab.opener = null
+  documentTab.document.title = 'Memuat dokumen'
+  documentTab.document.body.textContent = 'Memuat dokumen...'
+
+  try {
+    const previewUrl = String(document.preview_url).replace(/^\/api\//, '/')
+    const response = await http.get(previewUrl, { responseType: 'blob' })
+    const objectUrl = URL.createObjectURL(response.data)
+    documentTab.location.replace(objectUrl)
+
+    // Beri browser cukup waktu untuk memuat PDF sebelum URL sementara dilepas.
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60 * 1000)
+  } catch (error) {
+    documentTab.close()
+    toastStore.push(error?.response?.data?.message || 'Dokumen tidak dapat dibuka.', 'error')
+  }
 }
 
 function formatDateTime(value) {
@@ -896,6 +885,7 @@ async function loadWorkflow() {
     if (!app.value) app.value = {}
     app.value.checklists = workflow.checklists || []
     app.value.notes = workflow.notes || []
+    app.value.status_histories = workflow.histories || []
   } catch (error) {
     workflowError.value = error?.response?.data?.message || 'Gagal memuat data workflow.'
     warnDev('[AppDetailContent] loadWorkflow error:', error)
@@ -966,60 +956,6 @@ async function confirmDeleteChecklist() {
   }
 }
 
-async function addNote() {
-  if (!noteForm.value.body.trim()) {
-    toastStore.push('Isi catatan tidak boleh kosong.', 'error')
-    return
-  }
-  // Auto-kategorisasi berdasarkan role
-  let autoType = 'info'
-  if (auth.role === 'tim_uji_keamanan') autoType = 'uji_keamanan'
-  else if (['tim_implementasi_aplikasi', 'devops_developer'].includes(auth.role || '')) autoType = 'perbaikan'
-  else if (auth.role === 'analis_desain') autoType = 'info'
-
-  savingNote.value = true
-  try {
-    await http.post(`/aplikasi/${route.params.id}/notes`, {
-      note_type: autoType,
-      body: noteForm.value.body.trim(),
-    })
-    noteForm.value = { body: '' }
-    toastStore.push('Catatan berhasil ditambahkan.', 'success')
-    await loadWorkflow()
-  } catch (error) {
-    const message = error?.response?.data?.message || 'Gagal menambah catatan.'
-    toastStore.push(message, 'error')
-  } finally {
-    savingNote.value = false
-  }
-}
-
-function deleteNote(item) {
-  confirmingDeleteNote.value = item
-}
-
-function closeDeleteNoteModal() {
-  if (deletingNoteId.value) return
-  confirmingDeleteNote.value = null
-}
-
-async function confirmDeleteNote() {
-  const item = confirmingDeleteNote.value
-  if (!item) return
-  deletingNoteId.value = item.id
-  try {
-    await http.delete(`/aplikasi/${route.params.id}/notes/${item.id}`)
-    toastStore.push('Catatan berhasil dihapus.', 'success')
-    confirmingDeleteNote.value = null
-    await loadWorkflow()
-  } catch (error) {
-    const message = error?.response?.data?.message || 'Gagal menghapus catatan.'
-    toastStore.push(message, 'error')
-  } finally {
-    deletingNoteId.value = null
-  }
-}
-
 const checklistStats = computed(() => {
   const items = app.value?.checklists || []
   const done = items.filter(i => i.item_status === 'done').length
@@ -1030,10 +966,6 @@ const filteredNotes = computed(() => {
   return Array.isArray(app.value?.notes) ? app.value.notes : []
 })
 
-function noteTypeLabel(value) {
-  const map = { perbaikan: 'Perbaikan', uji_keamanan: 'Uji Keamanan', info: 'Info' }
-  return map[value] || value || 'Catatan'
-}
 // ==== END WORKFLOW FUNCTIONS ====
 
 async function addImplementationChecklistItem() {
@@ -1075,21 +1007,38 @@ async function updateImplementationChecklistItem(item, patch) {
   }
 }
 
-function formatChecklistStatus(value) {
-  if (value === 'done') return 'Selesai'
-  if (value === 'in_progress') return 'Diproses'
-  return 'Pending'
+function deleteImplementationChecklistItem(item) {
+  confirmingDeleteImplementationChecklist.value = item
 }
 
-function getChecklistBadgeClass(value) {
-  if (value === 'done') return 'badge-success'
-  if (value === 'in_progress') return 'badge-warning'
-  return 'badge-info'
+function closeDeleteImplementationChecklistModal() {
+  if (updatingImplementationChecklistId.value) return
+  confirmingDeleteImplementationChecklist.value = null
+}
+
+async function confirmDeleteImplementationChecklistItem() {
+  const item = confirmingDeleteImplementationChecklist.value
+  if (!item) return
+
+  updatingImplementationChecklistId.value = item.id
+  try {
+    await http.delete(`/aplikasi/${route.params.id}/implementation-checklists/${item.id}`)
+    confirmingDeleteImplementationChecklist.value = null
+    await loadImplementationChecklist()
+    toastStore.push('Item checklist berhasil dihapus.', 'success')
+  } catch (error) {
+    const msg = error?.response?.data?.message || 'Gagal menghapus item checklist.'
+    toastStore.push(msg, 'error')
+  } finally {
+    updatingImplementationChecklistId.value = null
+  }
 }
 
 async function focusImplementationTitle() {
   await nextTick()
-  implementationTitleInput.value?.focus()
+  const field = implementationTitleInput.value
+  field?.focus?.()
+  field?.$el?.querySelector?.('input')?.focus()
 }
 
 function securityStatusText(value) {
@@ -1111,143 +1060,6 @@ const analisaDesains = computed(() => {
     return ad.ui_platform || ad.interop_type || ad.storage_type || ad.nama_aktor || ad.method || ad.url
   })
   return result
-})
-
-// Frontend: Generate dari UI Platform di Analisa Desain
-const frontendData = computed(() => {
-  if (!app.value || !analisaDesains.value.length) return { proyeks: [], configs: [], apiGatewayDev: [], apiGateway: [] }
-  
-  // Get unique UI Platforms
-  const uiPlatforms = [...new Set(analisaDesains.value.filter(ad => ad.ui_platform).map(ad => ad.ui_platform))]
-  
-  // Generate proyek frontend dari UI Platform
-  const proyeks = uiPlatforms.map(platform => ({
-    id: `frontend-${platform}`,
-    modul: `${app.value.nama_aplikasi}-${platform}`,
-    jenis: 'Frontend'
-  }))
-  
-  // Generate URL config
-  const configs = uiPlatforms.length > 0 ? [{
-    local_url: `/spl-dev.bssn.go.id/${app.value.nama_singkat?.toLowerCase() || ''}`,
-    feat_staging_production_url: `/api/${app.value.nama_singkat?.toLowerCase() || ''}`
-  }] : []
-  
-  // API Gateway SPL Dev & SPL (dari interop_type)
-  const interops = [...new Set(analisaDesains.value.filter(ad => ad.interop_type).map(ad => ad.interop_type))]
-  const apiGatewayDev = interops.length > 0 ? [{
-    service_name: app.value.nama_singkat?.toLowerCase() || '',
-    path: '/api',
-    route_name: app.value.nama_singkat?.toLowerCase() || '',
-    full_path: `/${app.value.nama_singkat?.toLowerCase() || ''}`
-  }] : []
-  
-  const apiGateway = interops.length > 0 ? [{
-    service_name: app.value.nama_singkat?.toLowerCase() || '',
-    path: '/api',
-    route_name: app.value.nama_singkat?.toLowerCase() || '',
-    full_path: `/${app.value.nama_singkat?.toLowerCase() || ''}`
-  }] : []
-  
-  return { proyeks, configs, apiGatewayDev, apiGateway }
-})
-
-// Backend: Generate dari Storage Type 'db' dan Transaksi di Analisa Desain
-const backendData = computed(() => {
-  if (!app.value) return { 
-    proyeks: [], 
-    databaseStaging: [],
-    databaseProduction: [],
-    objectStorageDev: [],
-    objectStorage: [],
-    apiGatewayDev: [],
-    apiGateway: [],
-    auth: [],
-    env: [],
-    endpoints: [] 
-  }
-  
-  // Get storage dengan type 'db' untuk database config
-  const hasDatabase = analisaDesains.value.some(ad => ad.storage_type === 'db')
-  const hasObjectStorage = analisaDesains.value.some(ad => ad.storage_type === 'object-storage')
-  const interops = [...new Set(analisaDesains.value.filter(ad => ad.interop_type).map(ad => ad.interop_type))]
-  
-  // Generate proyek backend
-  const proyeks = hasDatabase ? [{
-    id: 'backend-main',
-    modul: `${app.value.nama_aplikasi}-backend`,
-    jenis: 'Backend'
-  }] : []
-  
-  // Database Staging
-  const databaseStaging = hasDatabase ? [{
-    db_connection: 'mysql',
-    db_host: 'dbt-dev.bssn.go.id',
-    db_port: '3306',
-    db_database: app.value.nama_singkat?.toLowerCase() || '',
-    db_username: app.value.nama_singkat?.toLowerCase() || ''
-  }] : []
-  
-  // Database Production
-  const databaseProduction = hasDatabase ? [{
-    db_connection: 'mysql',
-    db_host: 'dbt.bssn.go.id',
-    db_port: '3306',
-    db_database: app.value.nama_singkat?.toLowerCase() || '',
-    db_username: app.value.nama_singkat?.toLowerCase() || ''
-  }] : []
-  
-  // Object Storage Minio Dev
-  const objectStorageDev = hasObjectStorage ? [{
-    bucket: app.value.nama_singkat?.toLowerCase() || '',
-    region: 'us-east-1',
-    endpoint: 'https://minio-dev.bssn.go.id:9000'
-  }] : []
-  
-  // Object Storage Minio
-  const objectStorage = hasObjectStorage ? [{
-    bucket: app.value.nama_singkat?.toLowerCase() || '',
-    region: 'us-east-1',
-    endpoint: 'https://minio.bssn.go.id:9000'
-  }] : []
-  
-  // API Gateway SPL Dev
-  const apiGatewayDev = interops.length > 0 ? [{
-    service_name: app.value.nama_singkat?.toLowerCase() || '',
-    path: '/api',
-    route_name: app.value.nama_singkat?.toLowerCase() || '',
-    full_path: `/${app.value.nama_singkat?.toLowerCase() || ''}`
-  }] : []
-  
-  // API Gateway SPL
-  const apiGateway = interops.length > 0 ? [{
-    service_name: app.value.nama_singkat?.toLowerCase() || '',
-    path: '/api',
-    route_name: app.value.nama_singkat?.toLowerCase() || '',
-    full_path: `/${app.value.nama_singkat?.toLowerCase() || ''}`
-  }] : []
-  
-  // Auth (dikosongkan - tetap tampil dengan empty state)
-  const auth = []
-  
-  // Env (dikosongkan - tetap tampil dengan empty state)
-  const env = []
-  
-  // Endpoints dari transaksi
-  const endpoints = analisaDesains.value.filter(ad => ad.method && ad.url)
-  
-  return { 
-    proyeks, 
-    databaseStaging,
-    databaseProduction,
-    objectStorageDev,
-    objectStorage,
-    apiGatewayDev,
-    apiGateway,
-    auth,
-    env,
-    endpoints 
-  }
 })
 
 // DevOps: Generate dari Storage Type dan Interop di Analisa Desain
@@ -1410,6 +1222,11 @@ const TECHNICAL_CONFIG_TABS = [
   { id: 'auth', label: 'Auth', icon: 'server' },
 ]
 
+const technicalConfigTabItems = TECHNICAL_CONFIG_TABS.map((tab) => ({
+  value: tab.id,
+  label: tab.label,
+}))
+
 function formatConfigKey(key) {
   return String(key || '')
     .replace(/_/g, ' ')
@@ -1495,8 +1312,8 @@ const progressSteps = [
   },
   {
     key: ['analisa_desain'],
-    label: 'Analisa & Desain',
-    desc: 'Tim analis menyusun laporan analisa dan desain teknis',
+    label: 'Analisis & Desain',
+    desc: 'Tim analis menyusun laporan analisis dan desain teknis',
     icon: 'chart',
   },
   {
@@ -1559,13 +1376,13 @@ const userContextMessage = computed(() => {
 
   const map = {
     'diajukan': { type: 'info', title: 'Menunggu Verifikasi', desc: 'Pengajuan Anda sedang diperiksa oleh tim pengelola. Tidak ada tindakan yang perlu Anda lakukan saat ini.' },
-    'perlu_perbaikan_pengajuan': { type: 'warning', title: 'Perbaikan Diperlukan', desc: 'Tim pengelola meminta perbaikan pada formulir pengajuan Anda. Silakan cek catatan di bawah.' },
+    'perlu_perbaikan_pengajuan': { type: 'warning', title: 'Perbaikan Diperlukan', desc: 'Tim pengelola meminta perbaikan pada formulir pengajuan Anda. Buka tab Catatan untuk melihat alasan dan tindak lanjutnya.' },
     'terverifikasi': { type: 'info', title: 'Terverifikasi', desc: 'Pengajuan Anda telah diverifikasi dan sedang menunggu jadwal penilaian kelayakan.' },
-    'layak': { type: 'success', title: 'Lolos Kelayakan', desc: 'Pengajuan Anda dinyatakan layak. Tim analis akan segera menyusun dokumen analisa & desain teknis.' },
+    'layak': { type: 'success', title: 'Lolos Kelayakan', desc: 'Pengajuan Anda dinyatakan layak. Tim analis akan segera menyusun dokumen analisis dan desain teknis.' },
     'tidak_layak': { type: 'danger', title: 'Tidak Layak', desc: 'Pengajuan Anda dinyatakan tidak layak dan proses dihentikan.' },
-    'analisa_desain': { type: 'info', title: 'Analisa & Desain', desc: 'Tim analis sedang menyusun dokumen teknis berdasarkan pengajuan Anda.' },
+    'analisa_desain': { type: 'info', title: 'Analisis & Desain', desc: 'Tim analis sedang menyusun dokumen teknis berdasarkan pengajuan Anda.' },
     'pengembangan': { type: 'info', title: 'Pengembangan', desc: 'Aplikasi sedang dibangun oleh tim implementasi.' },
-    'uat': { type: 'warning', title: 'Tindakan Diperlukan: UAT', desc: 'Aplikasi siap diuji. Silakan unduh format UAT, lakukan pengujian, dan unggah hasilnya di panel dokumen di bawah.' },
+    'uat': { type: 'warning', title: 'Tindakan Diperlukan: UAT', desc: 'Aplikasi siap diuji. Buka tab Dokumen untuk mengunduh format UAT dan mengunggah hasil pengujian.' },
     'perbaikan_uat': { type: 'info', title: 'Menunggu Perbaikan UAT', desc: 'Pengelola meminta perbaikan dari hasil UAT. Tim Implementasi sedang menindaklanjuti temuan sebelum aplikasi dikirim kembali ke UAT.' },
     'uji_keamanan': { type: 'info', title: 'Uji Keamanan', desc: 'Aplikasi sedang diaudit oleh tim keamanan. Menunggu hasil pengujian.' },
     'perbaikan_keamanan': { type: 'info', title: 'Perbaikan Keamanan', desc: 'Tim implementasi sedang memperbaiki celah keamanan yang ditemukan.' },
@@ -1580,65 +1397,47 @@ const userContextMessage = computed(() => {
 </script>
 
 <template>
-    <div class="container app-detail-container">
-      <!-- Sticky Header Area for Desktop -->
-      <div class="sticky-header-container">
-        <!-- Hero header card (konsisten dengan dashboard) -->
-        <div class="detail-hero-card">
-          <div class="detail-hero-text">
-            <nav class="detail-hero-breadcrumb" aria-label="breadcrumb">
-              <button @click="router.push(basePath)" class="dh-bc-link">
-                <Icons name="dashboard" :size="12" />
-                Dashboard
-              </button>
-              <span class="dh-bc-sep">/</span>
-              <button @click="router.push(basePath)" class="dh-bc-link">
-                {{ listBreadcrumbLabel }}
-              </button>
-              <span class="dh-bc-sep">/</span>
-              <span class="dh-bc-current">{{ app?.nama_aplikasi || app?.nama_singkat || 'Detail' }}</span>
-            </nav>
-            <h1 class="detail-hero-title">Detail Aplikasi</h1>
-            <p class="detail-hero-sub">{{ app?.nama_aplikasi || app?.nama_singkat || 'Detail aplikasi' }}</p>
+    <div class="ui-page app-detail-container">
+      <AsyncState
+        v-if="loading || loadError || !app"
+        class="detail-root-state"
+        :loading="loading"
+        :error="loadError"
+        :empty="!loading && !loadError && !app"
+        empty-icon="inbox"
+        empty-title="Aplikasi tidak tersedia"
+        empty-description="Data aplikasi tidak ditemukan atau tidak dapat Anda akses."
+        @retry="loadData"
+      />
+
+      <PageHeader
+        v-if="!loading && app"
+        :title="app.nama_aplikasi || app.nama_singkat || 'Aplikasi'"
+        :description="`${app.nama_layanan || 'Informasi aplikasi'} - ${getShortStatusLabel(app.status)}`"
+      >
+        <template v-if="availableActions.length > 0 && !props.securityMode" #actions>
+          <div class="workflow-action-buttons">
+            <Button
+              v-for="(action, idx) in availableActions"
+              :key="action.label"
+              :hierarchy="workflowButtonHierarchy(idx)"
+              size="lg"
+              class="workflow-action-btn"
+              :class="workflowButtonClass(action)"
+              :prefix-icon="idx === 0 ? IconRocket : undefined"
+              @click="openActionModal(action)"
+            >
+              {{ action.label }}
+            </Button>
           </div>
-
-        </div>
-
-        <!-- ===== ACTION BUTTONS (WORKFLOW) - disembunyikan untuk security role ===== -->
-        <div v-if="!loading && availableActions.length > 0 && !props.securityMode" class="card actions-card">
-          <div class="actions-header-inline">
-            <div>
-              <div class="actions-title-row">
-                <h3 class="detail-section-title">Aksi Workflow</h3>
-                <span v-if="app?.status" class="workflow-stage-badge">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  {{ getShortStatusLabel(app.status) }}
-                </span>
-              </div>
-              <p class="actions-subtitle">Silakan pilih aksi berikut untuk memproses aplikasi ke tahap selanjutnya.</p>
-            </div>
-            <div class="actions-row">
-              <button
-                v-for="(action, idx) in availableActions"
-                :key="idx"
-                class="btn"
-                :class="action.btnClass || 'btn-primary'"
-                @click="openActionModal(action)"
-              >
-                {{ action.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-        <!-- ===================================== -->
-
-      </div>
+        </template>
+      </PageHeader>
 
       <!-- ===== STEPPER PROGRES PENGAJUAN ===== -->
       <div v-if="!loading && showApplicationProgress && app" class="uk-stepper-wrap">
         <div class="uk-stepper-header">
           <div class="uk-stepper-title-row">
-            <h3 class="uk-stepper-title">Progres Pengajuan</h3>
+            <h3 class="uk-stepper-title">Progres pengajuan</h3>
             <span
               v-if="isSpecialStatus"
               class="uk-stepper-special-badge"
@@ -1662,9 +1461,7 @@ const userContextMessage = computed(() => {
 
             <div class="uk-step-icon-wrap">
               <div class="uk-step-icon">
-                <svg v-if="getStepState(idx) === 'done'" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
-                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
+                <Icons v-if="getStepState(idx) === 'done'" name="check" :size="16" />
                 <div v-else-if="getStepState(idx) === 'active'" class="uk-step-active-dot"></div>
                 <span v-else class="uk-step-num">{{ idx + 1 }}</span>
               </div>
@@ -1678,55 +1475,84 @@ const userContextMessage = computed(() => {
       </div>
       <!-- ===== END STEPPER ===== -->
 
+      <!-- ===== KONTEKS TINDAKAN SELANJUTNYA ===== -->
+      <div v-if="!loading && props.unitKerjaMode && userContextMessage" class="uk-context-box" :class="`uk-context-${userContextMessage.type}`">
+        <div class="uk-context-icon">
+          <Icons v-if="userContextMessage.type === 'info'" name="info" :size="24" />
+          <Icons v-if="userContextMessage.type === 'warning'" name="alert-triangle" :size="24" />
+          <Icons v-if="userContextMessage.type === 'success'" name="check-circle" :size="24" />
+          <Icons v-if="userContextMessage.type === 'danger'" name="x-circle" :size="24" />
+        </div>
+        <div class="uk-context-content">
+          <h4 class="uk-context-title">{{ userContextMessage.title }}</h4>
+          <p class="uk-context-desc">{{ userContextMessage.desc }}</p>
+        </div>
+      </div>
+      <!-- ========================================= -->
 
-      <!-- ===== UNIFIED MAIN TAB NAVIGATION (semua role kecuali unit_kerja) ===== -->
-      <div v-if="!loading && isNonUnitKerjaRole && availableMainTabs.length > 0" class="card detail-tabs-card">
-        <nav class="nav-menu workspace-tabs detail-tabs">
-          <button
-            v-for="tab in availableMainTabs"
-            :key="tab.id"
-            :class="{ active: activeTab === tab.id }"
-            @click="activeTab = tab.id"
-          >
-            {{ tab.label }}
-          </button>
-        </nav>
+      <!-- ===== UNIFIED MAIN TAB NAVIGATION ===== -->
+      <div v-if="!loading && isNonUnitKerjaRole && availableMainTabs.length > 0" class="detail-tabs-card">
+        <TabHorizontal
+          :value="activeTab"
+          :items="mainTabItems"
+          aria-label="Bagian detail aplikasi"
+          @change="setActiveMainTab"
+        />
       </div>
       <!-- =========================================================== -->
 
-      <!-- ===== TAB: INFORMASI (semua non-unit-kerja role) ===== -->
-      <div v-if="!loading && isNonUnitKerjaRole && activeTab === 'informasi'" class="card detail-tab-panel detail-info-card">
-        <h4 class="section-title">Informasi Aplikasi</h4>
+      <!-- ===== TAB: INFORMASI ===== -->
+      <div
+        v-if="!loading && isNonUnitKerjaRole && activeTab === 'informasi'"
+        id="detail-panel-informasi"
+        class="card detail-tab-panel detail-info-card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-informasi"
+        tabindex="0"
+      >
+        <h4 class="section-title">Informasi aplikasi</h4>
         <DetailInfoGrid :app="app" />
         <div v-if="canDeactivateApp" class="detail-danger-zone">
           <div class="detail-danger-copy">
-            <h5>Nonaktifkan Aplikasi</h5>
+            <h5>Nonaktifkan aplikasi</h5>
             <p>Aksi ini digunakan untuk aplikasi production yang sudah tidak digunakan, tanpa menghapus riwayat dan dokumennya.</p>
           </div>
-          <button type="button" class="btn btn-danger detail-danger-btn" @click="openDeactivateModal">
-            <Icons name="trash" :size="14" />
+          <Button
+            hierarchy="secondary"
+            size="lg"
+            class="idds-danger-button detail-danger-btn"
+            :prefix-icon="IconTrash"
+            @click="openDeactivateModal"
+          >
             Nonaktifkan
-          </button>
+          </Button>
         </div>
       </div>
       <!-- ======================================================= -->
 
       <!-- ===== TAB: CHECKLIST (semua non-unit-kerja role) ===== -->
-      <div v-if="!loading && showFeasibilityChecklistPanel" class="detail-tab-panel card">
+      <div
+        v-if="!loading && showFeasibilityChecklistPanel"
+        id="detail-panel-checklist"
+        class="detail-tab-panel card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-checklist"
+        tabindex="0"
+      >
         <!-- Header + Stats + Progress bar -->
         <div class="checklist-card-header">
           <div class="checklist-header-top">
             <h4 class="checklist-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              <Icons name="check-circle" :size="18" />
               Checklist Kelayakan
             </h4>
             <div class="checklist-stat-chips">
               <span class="stat-chip stat-chip--done">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <Icons name="check" :size="12" />
                 {{ checklistStats.done }} Selesai
               </span>
               <span class="stat-chip stat-chip--pending">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+                <Icons name="alert-circle" :size="12" />
                 {{ checklistStats.pending }} Belum
               </span>
             </div>
@@ -1743,32 +1569,33 @@ const userContextMessage = computed(() => {
         </div>
 
         <!-- Add form -->
-        <div class="checklist-add-form">
+        <form class="checklist-add-form" @submit.prevent="addChecklist">
           <div class="checklist-add-inputs">
-            <div class="checklist-add-field">
-              <label class="checklist-add-label">Item baru</label>
-              <input
-                v-model="checklistForm.title"
-                type="text"
-                placeholder="Contoh: Dokumen sudah lengkap..."
-                maxlength="120"
-                @keyup.enter="checklistForm.title?.trim() && addChecklist()"
-              />
-            </div>
-            <div class="checklist-add-field">
-              <label class="checklist-add-label">Catatan <span class="muted">(opsional)</span></label>
-              <input v-model="checklistForm.notes" type="text" placeholder="Catatan tambahan..." maxlength="240" />
-            </div>
+            <TextField
+              v-model="checklistForm.title"
+              label="Item baru"
+              placeholder="Contoh: Dokumen sudah lengkap"
+              :max-length="120"
+              required
+            />
+            <TextField
+              v-model="checklistForm.notes"
+              label="Catatan (opsional)"
+              placeholder="Tambahkan catatan pendukung"
+              :max-length="240"
+            />
           </div>
-          <button
-            class="btn btn-primary checklist-add-btn"
+          <Button
+            hierarchy="primary"
+            size="lg"
+            type="submit"
+            class="checklist-add-btn"
+            :prefix-icon="IconPlus"
             :disabled="savingChecklist || !checklistForm.title?.trim()"
-            @click="addChecklist"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {{ savingChecklist ? 'Menyimpan...' : 'Tambah' }}
-          </button>
-        </div>
+            {{ savingChecklist ? 'Menyimpan...' : 'Tambah item' }}
+          </Button>
+        </form>
 
         <!-- List -->
         <div v-if="workflowLoading" class="muted detail-loading">Memuat checklist...</div>
@@ -1794,6 +1621,7 @@ const userContextMessage = computed(() => {
                   class="checklist-note-input-inline"
                   type="text"
                   placeholder="Catatan (opsional)"
+                  :aria-label="`Catatan untuk ${item.title}`"
                   maxlength="240"
                   :disabled="updatingChecklistId === item.id"
                   @change="updateChecklist(item, { notes: item.notes?.trim() || null })"
@@ -1803,115 +1631,81 @@ const userContextMessage = computed(() => {
             </div>
             <!-- Aksi -->
             <div class="checklist-item-action checklist-item-actions-group">
-              <label class="checklist-toggle-compact">
-                <input
-                  type="checkbox"
-                  :checked="item.item_status === 'done'"
+              <span
+                class="checklist-checkbox-only"
+                :title="item.item_status === 'done' ? 'Layak' : 'Belum layak'"
+              >
+                <Checkbox
+                  :model-value="item.item_status === 'done'"
+                  :label="item.item_status === 'done' ? 'Tandai belum layak' : 'Tandai layak'"
+                  size="sm"
                   :disabled="updatingChecklistId === item.id"
-                  @change="updateChecklist(item, { item_status: $event.target.checked ? 'done' : 'pending' })"
+                  @update:model-value="updateChecklist(item, { item_status: $event ? 'done' : 'pending' })"
                 />
-                <span>{{ item.item_status === 'done' ? 'Layak' : 'Belum layak' }}</span>
-              </label>
-              <button
-                class="btn btn-icon btn-delete"
+              </span>
+              <Button
+                hierarchy="custom"
+                size="sm"
+                class="checklist-delete-btn idds-icon-danger-button"
+                :prefix-icon="IconTrash"
                 @click="deleteChecklist(item)"
                 aria-label="Hapus checklist"
+                title="Hapus checklist"
                 :disabled="updatingChecklistId === item.id"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              </button>
+              />
             </div>
           </div>
         </div>
       </div>
       <!-- =========================================================== -->
 
-      <!-- ===== TAB: CATATAN (semua non-unit-kerja role) ===== -->
-      <div v-if="!loading && isNonUnitKerjaRole && activeTab === 'catatan'" class="detail-tab-panel card">
-        <h4 class="section-title">Riwayat Catatan &amp; Diskusi</h4>
-        <!-- Form tambah catatan -->
-        <div :class="['modern-note-form', { 'modern-note-form--empty-hint': !filteredNotes.length && !workflowLoading }]">
-          <textarea
-            v-model="noteForm.body"
-            rows="3"
-            placeholder="Ketik catatan, hasil review, atau informasi terkait aplikasi ini..."
-            maxlength="500"
-            class="modern-textarea"
-          ></textarea>
-          <div class="modern-note-actions">
-            <button class="btn btn-primary modern-submit-btn" :disabled="savingNote || !noteForm.body.trim()" @click="addNote">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              {{ savingNote ? 'Menyimpan...' : 'Simpan Catatan' }}
-            </button>
-          </div>
-        </div>
-        <div class="timeline-container">
-          <div v-if="workflowLoading" class="muted">Memuat catatan...</div>
-          <div v-else-if="workflowError" class="muted">{{ workflowError }}</div>
-          <div v-else-if="!filteredNotes.length" class="empty-message note-empty">
-            <Icons name="inbox" :size="36" />
-            <p class="empty-title">Belum ada catatan diskusi.</p>
-            <p class="empty-message-hint">Gunakan form di atas untuk memulai diskusi pertama.</p>
-          </div>
-          <div v-else class="timeline-list">
-            <div v-for="note in filteredNotes" :key="note.id" class="timeline-item">
-              <div class="timeline-avatar">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              </div>
-              <div class="timeline-content">
-                <div class="timeline-header">
-                  <span class="timeline-author">{{ note.creator?.name || 'Sistem' }}</span>
-                  <span v-if="note.note_type !== 'info'" class="timeline-badge" :class="note.note_type">{{ noteTypeLabel(note.note_type) }}</span>
-                  <span class="timeline-time">{{ formatDateTime(note.created_at) }}</span>
-                  <button class="btn btn-icon btn-delete btn-delete-timeline" @click="deleteNote(note)" aria-label="Hapus catatan">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                  </button>
-                </div>
-                <div class="timeline-body">
-                  <p>{{ note.body }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <!-- ===== TAB: CATATAN DAN KEPUTUSAN WORKFLOW ===== -->
+      <div
+        v-if="!loading && isNonUnitKerjaRole && activeTab === 'catatan'"
+        id="detail-panel-catatan"
+        class="detail-tab-panel card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-catatan"
+        tabindex="0"
+      >
+        <DiscussionThread
+          :app-id="route.params.id"
+          :notes="filteredNotes"
+          :histories="app?.status_histories || []"
+          :loading="workflowLoading"
+          :error="workflowError"
+          @refresh="loadWorkflow"
+        />
       </div>
       <!-- =========================================================== -->
 
-      <!-- ===== KONTEKS TINDAKAN SELANJUTNYA ===== -->
-      <div v-if="!loading && props.unitKerjaMode && userContextMessage" class="uk-context-box" :class="`uk-context-${userContextMessage.type}`">
-        <div class="uk-context-icon">
-          <Icons v-if="userContextMessage.type === 'info'" name="info" :size="24" />
-          <Icons v-if="userContextMessage.type === 'warning'" name="alert-triangle" :size="24" />
-          <Icons v-if="userContextMessage.type === 'success'" name="check-circle" :size="24" />
-          <Icons v-if="userContextMessage.type === 'danger'" name="x-circle" :size="24" />
-        </div>
-        <div class="uk-context-content">
-          <h4 class="uk-context-title">{{ userContextMessage.title }}</h4>
-          <p class="uk-context-desc">{{ userContextMessage.desc }}</p>
-        </div>
-      </div>
-      <!-- ========================================= -->
 
-
-      <div v-if="!loading && showImplementationChecklistPanel" class="card detail-tab-panel implementation-checklist-card">
+      <div
+        v-if="!loading && showImplementationChecklistPanel"
+        id="detail-panel-checklist"
+        class="card detail-tab-panel implementation-checklist-card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-checklist"
+        tabindex="0"
+      >
         <!-- Header + Progress Stats -->
         <div class="checklist-card-header">
           <div class="checklist-header-top">
             <h4 class="checklist-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              <Icons name="checklist" :size="18" />
               {{ implementationChecklistTitle }}
             </h4>
             <div class="checklist-stat-chips">
               <span class="stat-chip stat-chip--done">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <Icons name="check" :size="12" />
                 {{ implementationChecklistStats.done }} Selesai
               </span>
               <span class="stat-chip stat-chip--progress">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <Icons name="refresh-cw" :size="12" />
                 {{ implementationChecklistStats.inProgress }} Proses
               </span>
               <span class="stat-chip stat-chip--pending">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+                <Icons name="circle" :size="12" />
                 {{ implementationChecklistStats.pending }} Pending
               </span>
             </div>
@@ -1929,41 +1723,39 @@ const userContextMessage = computed(() => {
         </div>
 
         <!-- Add form -->
-        <div class="checklist-add-form">
+        <form class="checklist-add-form" @submit.prevent="addImplementationChecklistItem">
           <div class="checklist-add-inputs">
-            <div class="checklist-add-field">
-              <label class="checklist-add-label">Item baru</label>
-              <input
-                v-model="newImplementationItem.title"
-                type="text"
-                placeholder="Contoh: Implementasi halaman login..."
-                maxlength="120"
-                ref="implementationTitleInput"
-                :class="{ 'input-invalid': !!implementationTitleErrorVisible }"
-                @blur="implementationItemTitleTouched = true"
-                @keyup.enter="canAddImplementationItem && addImplementationChecklistItem()"
-              />
-              <p v-if="implementationTitleErrorVisible" class="form-hint error">{{ implementationTitleErrorVisible }}</p>
-            </div>
-            <div class="checklist-add-field">
-              <label class="checklist-add-label">Catatan <span class="muted">(opsional)</span></label>
-              <input
-                v-model="newImplementationItem.notes"
-                type="text"
-                placeholder="Catatan tambahan..."
-                maxlength="240"
-              />
-            </div>
+            <TextField
+              ref="implementationTitleInput"
+              v-model="newImplementationItem.title"
+              label="Item baru"
+              placeholder="Contoh: Implementasi halaman login"
+              :max-length="implementationTitleLimit"
+              required
+              :status="implementationTitleErrorVisible ? 'error' : 'neutral'"
+              :status-message="implementationTitleErrorVisible"
+              @blur="implementationItemTitleTouched = true"
+            />
+            <TextField
+              v-model="newImplementationItem.notes"
+              label="Catatan (opsional)"
+              placeholder="Tambahkan catatan pendukung"
+              :max-length="implementationNotesLimit"
+              :status="implementationNotesError ? 'error' : 'neutral'"
+              :status-message="implementationNotesError"
+            />
           </div>
-          <button
-            class="btn btn-primary checklist-add-btn"
+          <Button
+            hierarchy="primary"
+            size="lg"
+            type="submit"
+            class="checklist-add-btn"
+            :prefix-icon="IconPlus"
             :disabled="savingImplementationChecklist || !canAddImplementationItem"
-            @click="addImplementationChecklistItem"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {{ savingImplementationChecklist ? 'Menyimpan...' : 'Tambah' }}
-          </button>
-        </div>
+            {{ savingImplementationChecklist ? 'Menyimpan...' : 'Tambah item' }}
+          </Button>
+        </form>
 
         <!-- List -->
         <div v-if="loadingImplementationChecklist" class="muted detail-loading">Memuat checklist...</div>
@@ -1971,7 +1763,7 @@ const userContextMessage = computed(() => {
           <Icons name="inbox" :size="40" />
           <p class="empty-title">Belum ada item progress</p>
           <p class="empty-desc">{{ implementationChecklistEmptyText }}</p>
-          <button type="button" class="btn btn-secondary" @click="focusImplementationTitle">Tambah item pertama</button>
+          <Button hierarchy="secondary" size="lg" :prefix-icon="IconPlus" @click="focusImplementationTitle">Tambah item pertama</Button>
         </div>
         <div v-else class="checklist-items-list">
           <div
@@ -1984,43 +1776,56 @@ const userContextMessage = computed(() => {
               <span class="checklist-item-title" :class="{ 'done-text': item.item_status === 'done' }">{{ item.title }}</span>
               <span v-if="item.notes" class="checklist-item-notes">{{ item.notes }}</span>
             </div>
-            <div class="checklist-item-action">
-              <label class="checklist-toggle-compact">
-                <input
-                  type="checkbox"
-                  :checked="item.item_status === 'done'"
+            <div class="checklist-item-action checklist-item-actions-group">
+              <span
+                class="checklist-checkbox-only"
+                :title="item.item_status === 'done' ? 'Selesai' : 'Belum selesai'"
+              >
+                <Checkbox
+                  :model-value="item.item_status === 'done'"
+                  :label="item.item_status === 'done' ? 'Tandai belum selesai' : 'Tandai selesai'"
+                  size="sm"
                   :disabled="updatingImplementationChecklistId === item.id"
-                  @change="updateImplementationChecklistItem(item, { item_status: $event.target.checked ? 'done' : 'pending' })"
+                  @update:model-value="updateImplementationChecklistItem(item, { item_status: $event ? 'done' : 'pending' })"
                 />
-                <span>{{ item.item_status === 'done' ? 'Selesai' : 'Belum selesai' }}</span>
-              </label>
+              </span>
+              <Button
+                hierarchy="custom"
+                size="sm"
+                class="checklist-delete-btn idds-icon-danger-button"
+                :prefix-icon="IconTrash"
+                :disabled="updatingImplementationChecklistId === item.id"
+                aria-label="Hapus item checklist"
+                title="Hapus item checklist"
+                @click="deleteImplementationChecklistItem(item)"
+              />
             </div>
           </div>
         </div>
       </div>
 
       <!-- ===== TAB: KONFIGURASI (Tim Implementasi & DevOps) ===== -->
-      <div v-if="!loading && (isImplementationRole || isDevOpsRole) && activeTab === 'konfigurasi'" class="card detail-tab-panel deployment-status-card">
+      <div
+        v-if="!loading && (isImplementationRole || isDevOpsRole) && activeTab === 'konfigurasi'"
+        id="detail-panel-konfigurasi"
+        class="card detail-tab-panel deployment-status-card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-konfigurasi"
+        tabindex="0"
+      >
         <div class="deployment-status-header">
-          <h3>Konfigurasi Teknis</h3>
-          <p class="muted">Pratinjau konfigurasi teknis aplikasi berdasarkan hasil analisa desain.</p>
+          <h3>Konfigurasi teknis</h3>
+          <p class="muted">Pratinjau konfigurasi teknis aplikasi berdasarkan hasil analisis desain.</p>
         </div>
 
         <div class="technical-config-shell">
-          <div class="technical-config-tabs" role="tablist" aria-label="Kategori konfigurasi teknis">
-            <button
-              v-for="tab in TECHNICAL_CONFIG_TABS"
-              :key="tab.id"
-              type="button"
-              :class="['technical-config-tab', { active: activeTechnicalConfigTab === tab.id }]"
-              role="tab"
-              :aria-selected="activeTechnicalConfigTab === tab.id"
-              @click="activeTechnicalConfigTab = tab.id"
-            >
-              <Icons :name="tab.icon" :size="15" />
-              {{ tab.label }}
-            </button>
-          </div>
+          <TabHorizontal
+            :value="activeTechnicalConfigTab"
+            :items="technicalConfigTabItems"
+            aria-label="Kategori konfigurasi teknis"
+            class="technical-config-tabs"
+            @change="activeTechnicalConfigTab = $event"
+          />
 
           <div class="technical-config-content" role="tabpanel">
             <div class="technical-config-content-head">
@@ -2064,7 +1869,14 @@ const userContextMessage = computed(() => {
       <!-- =========================================================== -->
 
       <!-- ===== TAB: DEPLOYMENT (DevOps only) ===== -->
-      <div v-if="!loading && isDevOpsRole && activeTab === 'deployment'" class="card detail-tab-panel deployment-status-card">
+      <div
+        v-if="!loading && isDevOpsRole && activeTab === 'deployment'"
+        id="detail-panel-deployment"
+        class="card detail-tab-panel deployment-status-card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-deployment"
+        tabindex="0"
+      >
         <div class="deployment-status-header">
           <h3>Deployment</h3>
           <p class="muted">Kelola status deployment aplikasi ke staging dan production.</p>
@@ -2077,7 +1889,7 @@ const userContextMessage = computed(() => {
           <div class="deploy-step" :class="{ 'deploy-step--done': deploymentStatus.staging.deployed }">
             <div class="deploy-step-indicator">
               <div class="deploy-step-circle">
-                <svg v-if="deploymentStatus.staging.deployed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <Icons v-if="deploymentStatus.staging.deployed" name="check" :size="16" />
                 <span v-else>1</span>
               </div>
               <div class="deploy-step-line"></div>
@@ -2093,21 +1905,23 @@ const userContextMessage = computed(() => {
                 </span>
               </div>
               <div v-if="deploymentStatus.staging.deployed" class="deploy-done-info">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <Icons name="check" :size="14" />
                 <div>
                   <div><strong>{{ deploymentStatus.staging.deployed_by?.name || 'DevOps' }}</strong></div>
                   <div class="muted deploy-date">{{ formatDateTime(deploymentStatus.staging.deployed_at) }}</div>
                 </div>
               </div>
               <div v-else class="deploy-step-action">
-                <button
-                  class="btn btn-primary deploy-confirm-btn"
-                  :disabled="savingDeploymentStatus || isSubmittingDeploy"
+                <Button
+                  hierarchy="primary"
+                  size="lg"
+                  class="deploy-confirm-btn"
+                  :prefix-icon="IconRocket"
+                  :disabled="isSubmittingDeploy"
                   @click="openDeployModal('staging')"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                  Konfirmasi Deploy Staging
-                </button>
+                  Konfirmasi deploy staging
+                </Button>
               </div>
             </div>
           </div>
@@ -2119,8 +1933,8 @@ const userContextMessage = computed(() => {
           }">
             <div class="deploy-step-indicator">
               <div class="deploy-step-circle">
-                <svg v-if="deploymentStatus.production.deployed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                <svg v-else-if="!deploymentStatus.staging.deployed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <Icons v-if="deploymentStatus.production.deployed" name="check" :size="16" />
+                <Icons v-else-if="!deploymentStatus.staging.deployed" name="lock" :size="14" />
                 <span v-else>2</span>
               </div>
             </div>
@@ -2138,21 +1952,23 @@ const userContextMessage = computed(() => {
                 </span>
               </div>
               <div v-if="deploymentStatus.production.deployed" class="deploy-done-info">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <Icons name="clock" :size="14" />
                 Dideploy oleh <strong>{{ deploymentStatus.production.deployed_by?.name || 'DevOps' }}</strong>
                 pada {{ formatDateTime(deploymentStatus.production.deployed_at) }}
               </div>
               <div v-else-if="deploymentStatus.staging.deployed" class="deploy-step-action">
-                <button
-                  class="btn deploy-confirm-btn deploy-confirm-btn--production"
-                  :disabled="savingDeploymentStatus || isSubmittingDeploy"
+                <Button
+                  hierarchy="primary"
+                  size="lg"
+                  class="deploy-confirm-btn deploy-confirm-btn--production"
+                  :prefix-icon="IconRocket"
+                  :disabled="isSubmittingDeploy"
                   @click="openDeployModal('production')"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  Deploy ke Production
-                </button>
+                  Deploy ke production
+                </Button>
                 <p class="deploy-production-warning">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <Icons name="alert-triangle" :size="12" />
                   Aksi ini akan mengubah status aplikasi dan bersifat final.
                 </p>
               </div>
@@ -2166,7 +1982,7 @@ const userContextMessage = computed(() => {
         <!-- Deployment History -->
         <div v-if="deploymentHistory.length > 0" class="deploy-history-section">
           <h4 class="deploy-history-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <Icons name="clock" :size="16" />
             Riwayat Deployment
           </h4>
           <div class="deploy-history-list">
@@ -2177,68 +1993,61 @@ const userContextMessage = computed(() => {
                 <div class="deploy-history-time">{{ formatDateTime(entry.deployed_at) }}</div>
               </div>
               <div class="deploy-history-status">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <Icons name="check" :size="16" />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-if="showDeployModal" class="modal-backdrop" @click.self="closeDeployModal">
-        <div class="modal-card">
-          <div class="modal-header">
-            <div>
-              <h3 class="modal-title">
-                {{ deployModalEnv === 'production' ? 'Konfirmasi Deploy ke Production' : 'Konfirmasi Deploy ke Staging' }}
-              </h3>
-              <p class="modal-subtitle">
-                {{ deployModalEnv === 'production'
-                  ? 'Tindakan ini bersifat final dan akan mengubah status aplikasi menjadi Deployed Production. Pastikan semua requirements sudah terpenuhi.'
-                  : 'Pastikan build sudah stabil dan semua konfigurasi staging sudah diverifikasi sebelum mengonfirmasi.' }}
-              </p>
-            </div>
-            <button class="modal-close" @click="closeDeployModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <!-- Environment Badge -->
-            <div class="deploy-modal-env-badge" :class="deployModalEnv === 'production' ? 'env-production' : 'env-staging'">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              Environment: <strong>{{ deployModalEnv === 'production' ? 'Production' : 'Staging' }}</strong>
-            </div>
-
-            <!-- Notes textarea -->
-            <label class="modal-label modal-label-spaced">
-              Catatan deployment
-              <span class="modal-optional"> (opsional)</span>
-            </label>
-            <textarea
-              v-model="deployModalNote"
-              rows="3"
-              maxlength="500"
-              class="deploy-modal-textarea"
-              :placeholder="deployModalEnv === 'production'
-                ? 'Contoh: Semua service berjalan normal, monitoring aktif, rollback plan siap.'
-                : 'Contoh: Build #47 sukses di-deploy, endpoint /api/health merespons 200.'" 
-            ></textarea>
-            <p class="modal-char-count">{{ deployModalNote.length }}/500</p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeDeployModal" :disabled="isSubmittingDeploy">Batal</button>
-            <button
-              class="btn"
-              :class="deployModalEnv === 'production' ? 'btn-success' : 'btn-primary'"
-              @click="confirmDeploy"
-              :disabled="isSubmittingDeploy"
-            >
-              <svg v-if="isSubmittingDeploy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              {{ isSubmittingDeploy ? 'Memproses...' : (deployModalEnv === 'production' ? 'Ya, Deploy ke Production' : 'Ya, Konfirmasi Staging') }}
-            </button>
-          </div>
+      <Modal
+        :model-value="showDeployModal"
+        :title="deployModalEnv === 'production' ? 'Deploy ke production' : 'Konfirmasi deployment staging'"
+        size="md"
+        variant="centered"
+        :persistent="isSubmittingDeploy"
+        @update:model-value="!$event && closeDeployModal()"
+      >
+        <div class="deploy-confirmation-visual">
+          <img
+            src="/illustrations/deployment-confirmation.png"
+            alt=""
+            width="280"
+            height="210"
+          />
+          <p>
+            {{ deployModalEnv === 'production'
+              ? 'Pastikan monitoring dan rencana rollback sudah siap.'
+              : 'Pastikan build dan health check staging sudah valid.' }}
+          </p>
         </div>
-      </div>
+        <TextArea
+          v-model="deployModalNote"
+          label="Catatan deployment (opsional)"
+          rows="3"
+          :max-length="500"
+          :placeholder="deployModalEnv === 'production'
+            ? 'Contoh: Monitoring aktif dan rencana rollback sudah siap'
+            : 'Contoh: Build berhasil dan health check merespons normal'"
+        />
+        <div class="modal-actions">
+          <Button hierarchy="secondary" size="lg" :disabled="isSubmittingDeploy" @click="closeDeployModal">Batal</Button>
+          <Button hierarchy="primary" size="lg" :prefix-icon="IconRocket" :disabled="isSubmittingDeploy" @click="confirmDeploy">
+            {{ isSubmittingDeploy ? 'Memproses...' : (deployModalEnv === 'production' ? 'Deploy ke production' : 'Konfirmasi staging') }}
+          </Button>
+        </div>
+      </Modal>
 
       <!-- ===== TAB: DOKUMEN ===== -->
-      <div v-if="!loading && isDocumentPanelMode && (props.unitKerjaMode || activeTab === 'dokumen')" class="card unit-doc-card" :class="{ 'detail-tab-panel': isNonUnitKerjaRole }">
+      <div
+        v-if="!loading && isDocumentPanelMode && activeTab === 'dokumen'"
+        :id="isNonUnitKerjaRole ? 'detail-panel-dokumen' : undefined"
+        class="card unit-doc-card"
+        :class="{ 'detail-tab-panel': isNonUnitKerjaRole }"
+        :role="isNonUnitKerjaRole ? 'tabpanel' : undefined"
+        :aria-labelledby="isNonUnitKerjaRole ? 'detail-tab-dokumen' : undefined"
+        :tabindex="isNonUnitKerjaRole ? 0 : undefined"
+      >
         <div class="unit-doc-head">
           <h4 class="section-title">{{ documentPanelTitle }}</h4>
         </div>
@@ -2251,7 +2060,7 @@ const userContextMessage = computed(() => {
             <h4>{{ section.title }}</h4>
             <p v-if="section.desc" class="unit-doc-desc">{{ section.desc }}</p>
             <div class="unit-doc-actions">
-              <a v-if="section.template" class="action-btn view-btn" :href="section.template" target="_blank" rel="noopener">
+              <a v-if="section.template && canViewDocumentTemplate()" class="action-btn view-btn" :href="section.template" target="_blank" rel="noopener">
                 <Icons name="download" :size="14" />
                 {{ section.templateLabel }}
               </a>
@@ -2260,61 +2069,95 @@ const userContextMessage = computed(() => {
                 {{ section.guidebookLabel }}
               </a>
             </div>
-            <!-- Upload form: hanya untuk role+status yang bertanggung jawab -->
-            <div v-if="docSectionCanUploadNow(section)" class="unit-doc-upload">
-              <label class="unit-doc-picker">
-                <input class="unit-doc-picker-input" type="file" accept=".pdf,.doc,.docx" @change="selectDocumentFile(section.type, $event)" />
-                <span class="unit-doc-picker-button">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  {{ selectedFiles[section.type] ? selectedFiles[section.type].name : 'Pilih File (PDF / DOC)' }}
-                </span>
-              </label>
-              <button type="button" class="action-btn unit-doc-upload-btn unit-doc-upload-btn--full" :disabled="uploadingType === section.type || !selectedFiles[section.type]" @click="uploadDocument(section.type)">
-                <Icons name="plus" :size="14" />
-                {{ uploadingType === section.type ? 'Mengunggah...' : 'Unggah Dokumen' }}
-              </button>
-            </div>
-            <div class="unit-doc-meta">
-              <template v-if="getLatestDoc(section.type)">
-                <div class="unit-doc-status-badge">
-                  <Icons name="check" :size="14" />
-                  <span>v{{ getLatestDoc(section.type).version }} - {{ getLatestDoc(section.type).original_filename }}</span>
-                  <a v-if="getLatestDoc(section.type).file_url" :href="getLatestDoc(section.type).file_url" target="_blank" rel="noopener" class="unit-doc-download-link" title="Unduh dokumen">
-                    <Icons name="download" :size="12" />
-                  </a>
-                </div>
-              </template>
-              <template v-else>
-                <div class="unit-doc-empty">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  Belum ada dokumen diunggah
-                </div>
-                <div v-if="getDocumentEmptyHint(section)" class="unit-doc-empty-hint">
-                  {{ getDocumentEmptyHint(section) }}
-                </div>
-              </template>
-            </div>
-            <!-- Riwayat versi: tampil untuk semua role jika ada lebih dari 1 versi -->
-            <div v-if="getDocHistory(section.type).length > 1" class="unit-doc-history">
-              <h5>Riwayat versi dokumen</h5>
-              <div v-for="doc in getDocHistory(section.type)" :key="doc.id" class="unit-doc-history-item">
-                <div class="unit-doc-history-main">
-                  <strong>v{{ doc.version }}</strong>
-                  <span>{{ doc.original_filename }}</span>
-                  <span class="unit-doc-history-size">{{ formatFileSize(doc.file_size) }}</span>
-                  <a v-if="doc.file_url" class="unit-doc-history-link" :href="doc.file_url" target="_blank" rel="noopener">Unduh</a>
-                </div>
-                <div class="unit-doc-history-meta">
-                  {{ formatDateTime(doc.created_at) }} - {{ doc.uploaded_by?.name || 'System' }} - {{ doc.status }}
-                </div>
+            <div class="unit-doc-body">
+              <!-- Upload form: hanya untuk role+status yang bertanggung jawab -->
+              <div v-if="docSectionCanUploadNow(section)" class="unit-doc-upload">
+                <SingleFileUpload
+                  :title="`Pilih ${section.title.toLowerCase()}`"
+                  description="PDF, DOC, atau DOCX; maksimal 10 MB."
+                  accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  :allowed-extensions="['pdf', 'doc', 'docx']"
+                  :max-size="10 * 1024 * 1024"
+                  :validate-magic-number="true"
+                  :disabled="uploadingType === section.type"
+                  :status="selectedFiles[section.type] ? 'success' : 'idle'"
+                  @change="(file, validation) => selectDocumentFile(section.type, file, validation)"
+                  @remove="removeDocumentFile(section.type)"
+                />
+                <Button
+                  hierarchy="primary"
+                  size="lg"
+                  class="unit-doc-upload-btn unit-doc-upload-btn--full"
+                  :prefix-icon="IconPlus"
+                  :disabled="uploadingType === section.type || !selectedFiles[section.type]"
+                  @click="uploadDocument(section.type)"
+                >
+                  {{ uploadingType === section.type ? 'Mengunggah...' : 'Unggah dokumen' }}
+                </Button>
               </div>
+              <div class="unit-doc-meta">
+                <template v-if="getLatestDoc(section.type)">
+                  <button
+                    type="button"
+                    class="unit-doc-file"
+                    :title="`Lihat ${getLatestDoc(section.type).original_filename}`"
+                    @click="openDocumentInNewTab(getLatestDoc(section.type))"
+                  >
+                    <span class="unit-doc-file-icon">
+                      <Icons :name="getLatestDoc(section.type).mime_type === 'application/pdf' ? 'file-pdf' : 'file-doc'" :size="28" />
+                    </span>
+                    <span class="unit-doc-file-copy">
+                      <strong :title="getLatestDoc(section.type).original_filename">{{ getLatestDoc(section.type).original_filename }}</strong>
+                      <small>Versi {{ getLatestDoc(section.type).version }} · {{ formatFileSize(getLatestDoc(section.type).file_size) }}</small>
+                    </span>
+                    <span class="unit-doc-file-action">Lihat</span>
+                  </button>
+                </template>
+                <template v-else>
+                  <div class="unit-doc-empty">
+                    <Icons name="file" :size="14" />
+                    Belum ada dokumen diunggah
+                  </div>
+                  <div v-if="getDocumentEmptyHint(section)" class="unit-doc-empty-hint">
+                    {{ getDocumentEmptyHint(section) }}
+                  </div>
+                </template>
+              </div>
+              <!-- Riwayat versi: tampil untuk semua role jika ada lebih dari 1 versi -->
+              <Accordion
+                v-if="getDocHistory(section.type).length > 1"
+                class="unit-doc-history"
+                :title="`Riwayat dokumen (${getDocHistory(section.type).length} versi)`"
+              >
+                <div class="unit-doc-history-list">
+                  <div v-for="doc in getDocHistory(section.type)" :key="doc.id" class="unit-doc-history-item">
+                    <div class="unit-doc-history-main">
+                      <Icons :name="doc.mime_type === 'application/pdf' ? 'file-pdf' : 'file-doc'" :size="22" />
+                      <strong>v{{ doc.version }}</strong>
+                      <span class="unit-doc-history-name" :title="doc.original_filename">{{ doc.original_filename }}</span>
+                      <span class="unit-doc-history-size">{{ formatFileSize(doc.file_size) }}</span>
+                      <button v-if="doc.preview_url" type="button" class="unit-doc-history-link" @click="openDocumentInNewTab(doc)">Lihat</button>
+                    </div>
+                    <div class="unit-doc-history-meta">
+                      {{ formatDateTime(doc.created_at) }} - {{ doc.uploaded_by?.name || 'System' }} - {{ doc.status }}
+                    </div>
+                  </div>
+                </div>
+              </Accordion>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-if="!loading && props.securityMode && activeTab === 'hasil'" class="card detail-tab-panel security-review-card">
-        <h4 class="section-title">Hasil Uji Keamanan</h4>
+      <div
+        v-if="!loading && props.securityMode && activeTab === 'hasil'"
+        id="detail-panel-hasil"
+        class="card detail-tab-panel security-review-card"
+        role="tabpanel"
+        aria-labelledby="detail-tab-hasil"
+        tabindex="0"
+      >
+        <h4 class="section-title">Hasil uji keamanan</h4>
         <p class="security-subtitle">Isi status dan ringkasan temuan. Catatan perbaikan akan diteruskan ke pengelola aplikasi.</p>
 
         <div v-if="loadingSecurityReview" class="muted detail-loading">Memuat data uji keamanan...</div>
@@ -2328,15 +2171,12 @@ const userContextMessage = computed(() => {
                  'sec-status--pending': securityReview.security_test_passed === null
                }">
             <div class="sec-status-icon">
-              <!-- Lolos -->
-              <svg v-if="securityReview.security_test_passed === true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              <!-- Tidak Lolos -->
-              <svg v-else-if="securityReview.security_test_passed === false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-              <!-- Belum Diuji -->
-              <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <Icons v-if="securityReview.security_test_passed === true" name="check-circle" :size="22" />
+              <Icons v-else-if="securityReview.security_test_passed === false" name="x-circle" :size="22" />
+              <Icons v-else name="alert-circle" :size="22" />
             </div>
             <div class="sec-status-text">
-              <span class="sec-status-label">Status Pengujian</span>
+              <span class="sec-status-label">Status pengujian</span>
               <span class="sec-status-value">{{ securityStatusText(securityReview.security_test_passed) }}</span>
             </div>
             <div v-if="securityReview.security_tester || securityReview.security_tested_at" class="sec-status-meta">
@@ -2345,93 +2185,67 @@ const userContextMessage = computed(() => {
             </div>
           </div>
 
-          <!-- Form -->
-          <div class="sec-form">
+          <!-- Form input baru hanya tersedia selama hasil masih dapat diubah. -->
+          <div v-if="isSecurityReviewEditable" class="sec-form">
             <!-- Ringkasan -->
-            <div class="sec-form-field">
-              <label class="sec-form-label">Ringkasan hasil uji</label>
-              <p class="sec-form-hint">Jelaskan cakupan pengujian, temuan utama, dan kondisi akhir aplikasi.</p>
-              <textarea
-                v-model="securityReviewForm.security_test_notes"
-                class="sec-textarea"
-                rows="4"
-                maxlength="500"
-                placeholder="Contoh: Pengujian mencakup autentikasi, otorisasi, dan validasi input. Ditemukan 2 celah XSS pada form pencarian yang telah terdokumentasi."
-              ></textarea>
-              <span class="sec-char-count">{{ (securityReviewForm.security_test_notes || '').length }} / 500</span>
-            </div>
+            <TextArea
+              v-model="securityReviewForm.security_test_notes"
+              label="Ringkasan hasil uji"
+              rows="4"
+              :max-length="500"
+              placeholder="Jelaskan cakupan pengujian, temuan utama, dan kondisi akhir aplikasi"
+            />
 
             <!-- Catatan perbaikan -->
-            <div class="sec-form-field">
-              <label class="sec-form-label">
-                Catatan perbaikan
-                <span class="sec-optional">opsional</span>
-              </label>
-              <p class="sec-form-hint">Tulis temuan spesifik yang perlu diperbaiki sebelum retesting.</p>
-              <textarea
-                v-model="securityReviewForm.note"
-                class="sec-textarea"
-                rows="3"
-                maxlength="300"
-                placeholder="Contoh: Perbaiki validasi input pada endpoint /api/login - rentan terhadap SQL injection."
-              ></textarea>
-            </div>
+            <TextArea
+              v-model="securityReviewForm.note"
+              label="Catatan perbaikan (opsional)"
+              rows="3"
+              :max-length="300"
+              placeholder="Tulis temuan spesifik yang perlu diperbaiki sebelum pengujian ulang"
+            />
           </div>
 
           <!-- Error & Verdict Actions -->
-          <div class="sec-actions">
+          <div v-if="isSecurityReviewEditable" class="sec-actions">
             <div v-if="!securityReviewForm.security_test_notes?.trim()" class="sec-info-hint">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <Icons name="alert-circle" :size="14" />
               Isi ringkasan hasil uji terlebih dahulu sebelum mengirim keputusan.
             </div>
 
             <!-- Tombol keputusan - hanya tampil saat status masih uji_keamanan -->
             <template v-if="app?.status === 'uji_keamanan'">
               <div class="sec-verdict-row">
-                <button
-                  class="btn sec-verdict-btn sec-verdict-btn--pass"
+                <Button
+                  hierarchy="primary"
+                  size="lg"
+                  class="sec-verdict-btn sec-verdict-btn--pass"
+                  :prefix-icon="IconCheck"
                   :disabled="savingSecurityReview || !securityReviewForm.security_test_notes?.trim()"
                   @click="submitSecurityVerdict(true)"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  <span>
-                    <strong>Lolos Uji Keamanan</strong>
-                    <small>Aplikasi dinyatakan aman</small>
-                  </span>
-                </button>
-                <button
-                  class="btn sec-verdict-btn sec-verdict-btn--fail"
+                  Lolos uji keamanan
+                </Button>
+                <Button
+                  hierarchy="secondary"
+                  size="lg"
+                  class="sec-verdict-btn sec-verdict-btn--fail idds-danger-button"
                   :disabled="savingSecurityReview || !securityReviewForm.security_test_notes?.trim()"
                   @click="submitSecurityVerdict(false)"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                  <span>
-                    <strong>Belum Lolos</strong>
-                    <small>Perlu perbaikan</small>
-                  </span>
-                </button>
+                  Belum lolos
+                </Button>
               </div>
               <p class="sec-verdict-note">Keputusan ini akan mengubah status aplikasi dan tidak dapat dibatalkan dari halaman ini.</p>
             </template>
 
-            <!-- Jika sudah diputuskan, tampilkan tombol simpan catatan saja -->
-            <template v-else>
-              <button
-                class="btn btn-secondary sec-save-btn"
-                :disabled="savingSecurityReview || !securityReviewForm.security_test_notes?.trim()"
-                @click="saveSecurityReview"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
-                Simpan Catatan
-              </button>
-            </template>
           </div>
 
           <!-- History -->
           <div class="sec-history">
             <div class="sec-history-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              Riwayat Catatan
+              <Icons name="clock" :size="14" />
+              Riwayat catatan
             </div>
             <div v-if="securityNotes.length > 0" class="sec-history-list">
               <div v-for="note in securityNotes" :key="note.id" class="sec-history-item">
@@ -2446,7 +2260,7 @@ const userContextMessage = computed(() => {
               </div>
             </div>
             <div v-else class="sec-history-empty">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <Icons name="file" :size="32" />
               <span>Belum ada catatan pengujian</span>
             </div>
           </div>
@@ -2461,133 +2275,91 @@ const userContextMessage = computed(() => {
       </div>
 
       <!-- ===== DELETE CHECKLIST MODAL ===== -->
-      <div v-if="confirmingDeleteChecklist" class="modal-backdrop" @click="closeDeleteChecklistModal">
-        <div class="modal-card confirm-delete-card" @click.stop>
-          <div class="modal-header">
-            <div>
-              <h3>Hapus Checklist</h3>
-              <p class="modal-subtitle">Konfirmasi penghapusan item checklist.</p>
-            </div>
-            <button class="modal-close" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="closeDeleteChecklistModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p class="action-modal-copy">
-              Checklist <strong>{{ confirmingDeleteChecklist?.title }}</strong> akan dihapus dari aplikasi ini.
-            </p>
-            <p class="confirm-delete-note">Aksi ini tidak menghapus aplikasi atau dokumen, hanya item checklist yang dipilih.</p>
-          </div>
-          <div class="modal-footer action-modal-footer">
-            <button class="btn btn-secondary" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="closeDeleteChecklistModal">Batal</button>
-            <button class="btn btn-danger" :disabled="updatingChecklistId === confirmingDeleteChecklist?.id" @click="confirmDeleteChecklist">
-              <span v-if="updatingChecklistId === confirmingDeleteChecklist?.id" class="spinner-small spinner-inline"></span>
-              {{ updatingChecklistId === confirmingDeleteChecklist?.id ? 'Menghapus...' : 'Hapus Checklist' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <ConfirmationDrawer
+        :model-value="Boolean(confirmingDeleteChecklist)"
+        title="Hapus checklist"
+        description="Item checklist yang dipilih akan dihapus dari pemeriksaan aplikasi."
+        :subject="confirmingDeleteChecklist?.title || 'Checklist'"
+        confirm-label="Hapus checklist"
+        :loading="updatingChecklistId === confirmingDeleteChecklist?.id"
+        @update:model-value="!$event && closeDeleteChecklistModal()"
+        @confirm="confirmDeleteChecklist"
+        @cancel="closeDeleteChecklistModal"
+      />
+      <ConfirmationDrawer
+        :model-value="Boolean(confirmingDeleteImplementationChecklist)"
+        title="Hapus item checklist"
+        description="Item yang dipilih akan dihapus dari checklist progress aplikasi."
+        :subject="confirmingDeleteImplementationChecklist?.title || 'Item checklist'"
+        confirm-label="Hapus item"
+        :loading="updatingImplementationChecklistId === confirmingDeleteImplementationChecklist?.id"
+        @update:model-value="!$event && closeDeleteImplementationChecklistModal()"
+        @confirm="confirmDeleteImplementationChecklistItem"
+        @cancel="closeDeleteImplementationChecklistModal"
+      />
       <!-- ================================= -->
 
-      <!-- ===== DELETE NOTE MODAL ===== -->
-      <div v-if="confirmingDeleteNote" class="modal-backdrop" @click="closeDeleteNoteModal">
-        <div class="modal-card confirm-delete-card" @click.stop>
-          <div class="modal-header">
-            <div>
-              <h3>Hapus Catatan</h3>
-              <p class="modal-subtitle">Konfirmasi penghapusan catatan diskusi.</p>
-            </div>
-            <button class="modal-close" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="closeDeleteNoteModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p class="action-modal-copy">
-              Catatan dari <strong>{{ confirmingDeleteNote?.creator?.name || 'Sistem' }}</strong> akan dihapus dari riwayat aplikasi ini.
-            </p>
-            <div class="confirm-delete-preview">
-              <span v-if="confirmingDeleteNote?.note_type !== 'info'" class="timeline-badge" :class="confirmingDeleteNote?.note_type">
-                {{ noteTypeLabel(confirmingDeleteNote?.note_type) }}
-              </span>
-              <p>{{ confirmingDeleteNote?.body }}</p>
-            </div>
-            <p class="confirm-delete-note">Aksi ini hanya menghapus catatan yang dipilih dan tidak menghapus data aplikasi.</p>
-          </div>
-          <div class="modal-footer action-modal-footer">
-            <button class="btn btn-secondary" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="closeDeleteNoteModal">Batal</button>
-            <button class="btn btn-danger" :disabled="deletingNoteId === confirmingDeleteNote?.id" @click="confirmDeleteNote">
-              <span v-if="deletingNoteId === confirmingDeleteNote?.id" class="spinner-small spinner-inline"></span>
-              {{ deletingNoteId === confirmingDeleteNote?.id ? 'Menghapus...' : 'Hapus Catatan' }}
-            </button>
-          </div>
-        </div>
-      </div>
-      <!-- ============================= -->
-
       <!-- ===== DEACTIVATE APPLICATION MODAL ===== -->
-      <div v-if="showDeactivateModal" class="modal-backdrop" @click="closeDeactivateModal">
-        <div class="modal-card" @click.stop>
-          <div class="modal-header">
-            <div>
-              <h3>Nonaktifkan Aplikasi</h3>
-              <p class="modal-subtitle">Aksi ini hanya untuk aplikasi yang sudah production.</p>
-            </div>
-            <button class="modal-close" :disabled="isSubmittingDeactivate" @click="closeDeactivateModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p class="action-modal-copy">
-              Aplikasi <strong>{{ app?.nama_aplikasi }}</strong> akan ditandai nonaktif dan tetap tercatat dalam sistem.
-            </p>
-            <div class="form-group">
-              <label class="action-modal-label">Catatan <span class="muted">(opsional)</span></label>
-              <textarea
-                v-model="deactivateNote"
-                class="form-control action-modal-textarea"
-                rows="4"
-                maxlength="240"
-                placeholder="Contoh: Aplikasi sudah tidak digunakan oleh unit kerja."
-              ></textarea>
-            </div>
-          </div>
-          <div class="modal-footer action-modal-footer">
-            <button class="btn btn-secondary" :disabled="isSubmittingDeactivate" @click="closeDeactivateModal">Batal</button>
-            <button class="btn btn-danger" :disabled="isSubmittingDeactivate" @click="submitDeactivateApp">
-              <span v-if="isSubmittingDeactivate" class="spinner-small spinner-inline"></span>
-              {{ isSubmittingDeactivate ? 'Menonaktifkan...' : 'Nonaktifkan' }}
-            </button>
-          </div>
+      <Modal
+        :model-value="showDeactivateModal"
+        title="Nonaktifkan aplikasi"
+        :description="`${app?.nama_aplikasi || 'Aplikasi'} akan ditandai nonaktif dan tetap tercatat dalam sistem.`"
+        size="md"
+        variant="centered"
+        :persistent="isSubmittingDeactivate"
+        @update:model-value="!$event && closeDeactivateModal()"
+      >
+        <Alert variant="caution" title="Aplikasi production" message="Pastikan aplikasi sudah tidak digunakan sebelum dinonaktifkan." />
+        <TextArea
+          v-model="deactivateNote"
+          label="Catatan (opsional)"
+          rows="4"
+          :max-length="240"
+          placeholder="Contoh: Aplikasi sudah tidak digunakan oleh unit kerja"
+        />
+        <div class="modal-actions">
+          <Button hierarchy="secondary" size="lg" :disabled="isSubmittingDeactivate" @click="closeDeactivateModal">Batal</Button>
+          <Button hierarchy="secondary" size="lg" class="idds-danger-button" :prefix-icon="IconTrash" :disabled="isSubmittingDeactivate" @click="submitDeactivateApp">
+            {{ isSubmittingDeactivate ? 'Menonaktifkan...' : 'Nonaktifkan' }}
+          </Button>
         </div>
-      </div>
+      </Modal>
       <!-- ======================================= -->
 
       <!-- ===== WORKFLOW ACTION MODAL ===== -->
-      <div v-if="showActionModal" class="modal-backdrop" @click="closeActionModal">
-        <div class="modal-card" @click.stop>
-          <div class="modal-header">
-            <h3>{{ selectedAction?.label }}</h3>
-            <button class="modal-close" @click="closeActionModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p class="action-modal-copy">
-              Anda yakin ingin melanjutkan proses <strong>{{ selectedAction?.label }}</strong> untuk aplikasi <strong>{{ app?.nama_aplikasi }}</strong>?
-            </p>
-            <div v-if="selectedAction?.requiresNote" class="form-group">
-              <label class="action-modal-label">
-                {{ selectedAction.noteLabel || 'Catatan Tambahan' }} <span class="text-danger">*</span>
-              </label>
-              <textarea 
-                v-model="actionCatatan" 
-                class="form-control action-modal-textarea" 
-                rows="4" 
-                placeholder="Masukkan catatan yang relevan untuk aksi ini..."
-              ></textarea>
-            </div>
-          </div>
-          <div class="modal-footer action-modal-footer">
-            <button class="btn btn-secondary" @click="closeActionModal" :disabled="isSubmittingAction">Batal</button>
-            <button class="btn" :class="selectedAction?.btnClass || 'btn-primary'" @click="submitAction" :disabled="isSubmittingAction">
-              <span v-if="isSubmittingAction" class="spinner-small spinner-inline"></span>
-              {{ isSubmittingAction ? 'Memproses...' : 'Konfirmasi' }}
-            </button>
-          </div>
+      <Modal
+        :model-value="showActionModal"
+        :title="selectedAction?.label || 'Konfirmasi aksi'"
+        :description="`Lanjutkan proses untuk aplikasi ${app?.nama_aplikasi || ''}?`"
+        size="md"
+        variant="centered"
+        :persistent="isSubmittingAction"
+        @update:model-value="!$event && closeActionModal()"
+      >
+        <TextArea
+          v-if="selectedAction?.requiresNote"
+          v-model="actionCatatan"
+          :label="selectedAction.noteLabel || 'Catatan tambahan'"
+          rows="4"
+          placeholder="Tulis catatan yang relevan untuk aksi ini"
+          required
+          :status="!actionCatatan.trim() ? 'error' : 'neutral'"
+          :status-message="!actionCatatan.trim() ? 'Catatan wajib diisi.' : ''"
+        />
+        <div class="modal-actions">
+          <Button hierarchy="secondary" size="lg" :disabled="isSubmittingAction" @click="closeActionModal">Batal</Button>
+          <Button
+            :hierarchy="selectedAction?.btnClass === 'btn-danger' ? 'secondary' : 'primary'"
+            size="lg"
+            :class="workflowButtonClass(selectedAction)"
+            :prefix-icon="IconCheck"
+            :disabled="isSubmittingAction || (selectedAction?.requiresNote && !actionCatatan.trim())"
+            @click="submitAction"
+          >
+            {{ isSubmittingAction ? 'Memproses...' : 'Konfirmasi' }}
+          </Button>
         </div>
-      </div>
+      </Modal>
       <!-- ================================= -->
     </div>
 </template>
@@ -2605,8 +2377,8 @@ const userContextMessage = computed(() => {
 }
 .modal-card {
   background: #fff;
-  border-radius: 14px;
-  border: 1px solid var(--notion-border);
+  border-radius: 8px;
+  border: 1px solid var(--ina-stroke-primary);
   width: 90%;
   max-width: 500px;
   max-height: calc(100vh - 32px);
@@ -2622,17 +2394,18 @@ const userContextMessage = computed(() => {
 }
 .modal-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--idds-body-size);
   color: #1f2937;
+  line-height: var(--idds-body-line);
 }
 .modal-close {
   background: transparent;
   border: none;
-  font-size: 24px;
+  font-size: var(--idds-heading-h5-size);
   cursor: pointer;
   color: #6b7280;
   flex-shrink: 0;
-  line-height: 1;
+  line-height: var(--idds-heading-h5-line);
   padding: 0;
 }
 .modal-close:hover {
@@ -2640,23 +2413,25 @@ const userContextMessage = computed(() => {
 }
 .modal-title {
   margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
   color: #1e293b;
+  line-height: var(--idds-body-small-line);
 }
 .modal-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #64748b;
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 .modal-body {
   margin-bottom: 20px;
 }
 .modal-label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   color: #374151;
+  line-height: var(--idds-caption-line);
 }
 .modal-footer {
   display: flex;
@@ -2681,7 +2456,7 @@ const userContextMessage = computed(() => {
   width: 40px;
   height: 40px;
   border: 3px solid rgba(55, 53, 47, 0.1);
-  border-top-color: var(--notion-blue);
+  border-top-color: var(--ina-primary-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -2697,7 +2472,7 @@ const userContextMessage = computed(() => {
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .empty-state svg {
@@ -2706,24 +2481,27 @@ const userContextMessage = computed(() => {
 }
 
 .empty-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--notion-text);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-semibold);
+  color: var(--ina-content-primary);
   margin: 0 0 8px 0;
+  line-height: var(--idds-body-small-line);
 }
 
 .empty-desc {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
   margin: 0;
   max-width: 320px;
+  line-height: var(--idds-caption-line);
 }
 
 .field-hint {
   display: inline-block;
   margin-top: 6px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .url-section {
@@ -2737,21 +2515,23 @@ const userContextMessage = computed(() => {
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   border-radius: 6px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
 }
 
 .url-item label {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  font-weight: 500;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .url-value {
-  font-size: 14px;
-  color: var(--notion-text);
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .db-grid {
@@ -2766,9 +2546,9 @@ const userContextMessage = computed(() => {
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   border-radius: 6px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
 }
 
 .db-item--full {
@@ -2784,21 +2564,24 @@ const userContextMessage = computed(() => {
 }
 
 .db-item label {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  font-weight: 500;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .db-label {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  font-weight: 500;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .db-value {
-  font-size: 14px;
-  color: var(--notion-text);
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .unit-doc-card {
@@ -2809,20 +2592,95 @@ const userContextMessage = computed(() => {
 
 .unit-doc-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: stretch;
 }
 
 .unit-doc-item {
-  border: 1px solid var(--notion-border);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
   padding: 14px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
+  min-height: 250px;
+  height: auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.unit-doc-file {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ina-stroke-primary);
+  border-radius: var(--ina-radius-lg);
+  color: var(--ina-content-primary);
+  background: var(--ina-background-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unit-doc-file:hover {
+  border-color: var(--ina-stroke-secondary);
+  background: var(--ina-background-secondary);
+}
+
+.unit-doc-file-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ina-radius-lg);
+  color: var(--ina-negative-600);
+  background: var(--ina-negative-50);
+}
+
+.unit-doc-file-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.unit-doc-file-copy strong {
+  overflow: hidden;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--idds-caption-line);
+}
+
+.unit-doc-file-copy small {
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
+}
+
+.unit-doc-file-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ina-primary-primary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-small-line);
 }
 
 .unit-doc-item h4 {
   margin: 0 0 10px;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .unit-doc-actions {
@@ -2830,25 +2688,46 @@ const userContextMessage = computed(() => {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+  min-width: 0;
+}
+
+.unit-doc-actions > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.unit-doc-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 
 .unit-doc-upload {
-  display: flex;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  align-items: stretch;
   gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: fit-content;
+  max-height: max-content;
+}
+
+.unit-doc-upload > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .unit-doc-picker {
-  flex: 0 0 auto;
+  display: block;
+  width: 100%;
   min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  min-height: 0;
+  max-width: 100%;
+  cursor: pointer;
   box-sizing: border-box;
 }
 
@@ -2865,29 +2744,49 @@ const userContextMessage = computed(() => {
 }
 
 .unit-doc-picker-button {
-  flex: 0 0 auto;
-  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--notion-border);
-  background: var(--notion-muted-surface);
-  color: var(--notion-text);
-  font-size: 12px;
-  font-weight: 600;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1.5px dashed var(--ina-stroke-primary);
+  background: var(--ina-background-secondary);
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
-  transition: box-shadow 0.15s ease;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  line-height: var(--idds-caption-line);
+}
+
+.unit-doc-picker-button svg {
+  flex-shrink: 0;
+}
+
+.unit-doc-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .unit-doc-picker:hover .unit-doc-picker-button {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border-color: var(--ina-primary-primary);
+  background: #eef2fb;
+  color: var(--ina-primary-primary);
 }
 
 .unit-doc-upload button {
   flex-shrink: 0;
   white-space: nowrap;
+  margin-top: 0;
   margin-right: 0;
 }
 
@@ -2896,12 +2795,17 @@ const userContextMessage = computed(() => {
   color: #ffffff;
 }
 
+.unit-doc-upload-btn--full {
+  width: 100%;
+  justify-content: center;
+}
+
 .unit-doc-upload-btn:hover {
   background: #39456f;
 }
 
 .unit-doc-meta {
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .unit-doc-status-badge {
@@ -2909,16 +2813,19 @@ const userContextMessage = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: var(--notion-green-bg);
-  border: 1px solid var(--notion-green-border);
+  background: var(--ina-positive-50);
+  border: 1px solid var(--ina-positive-300);
   border-radius: 6px;
-  font-size: 12px;
-  color: var(--notion-green);
-  font-weight: 500;
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-positive-600);
+  font-weight: var(--idds-weight-medium);
   max-width: 100%;
+  box-sizing: border-box;
+  line-height: var(--idds-caption-small-line);
 }
 
 .unit-doc-status-badge span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2927,7 +2834,7 @@ const userContextMessage = computed(() => {
 .unit-doc-download-link {
   flex-shrink: 0;
   margin-left: 4px;
-  color: var(--notion-green);
+  color: var(--ina-positive-600);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -2939,14 +2846,16 @@ const userContextMessage = computed(() => {
 }
 
 .unit-doc-empty {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .unit-doc-empty-hint {
   margin-top: 6px;
-  font-size: 12px;
-  color: var(--notion-text-tertiary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-tertiary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .unit-doc-download-row {
@@ -2954,22 +2863,21 @@ const userContextMessage = computed(() => {
 }
 
 .unit-doc-history {
-  margin-top: 10px;
-  border-top: 1px dashed var(--notion-border);
-  padding-top: 10px;
+  margin-top: 0;
+  border-top: 1px dashed var(--ina-stroke-primary);
+  padding-top: 8px;
 }
 
-.unit-doc-history h5 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+.unit-doc-history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .unit-doc-history-item {
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
   padding: 8px;
-  margin-bottom: 8px;
 }
 
 .unit-doc-history-main {
@@ -2977,18 +2885,33 @@ const userContextMessage = computed(() => {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
+}
+
+.unit-doc-history-name {
+  min-width: 0;
+  flex: 1 1 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .unit-doc-history-size {
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
+  white-space: nowrap;
 }
 
 .unit-doc-history-link {
   margin-left: auto;
-  color: var(--notion-blue);
+  padding: 0;
+  border: 0;
+  color: var(--ina-primary-primary);
+  background: transparent;
+  font: inherit;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--idds-weight-semibold);
+  cursor: pointer;
 }
 
 .unit-doc-history-link:hover {
@@ -2997,18 +2920,20 @@ const userContextMessage = computed(() => {
 
 .unit-doc-history-meta {
   margin-top: 4px;
-  font-size: 11px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .analyst-focus-note {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 8px;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  background: var(--notion-bg);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  background: var(--ina-background-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .implementation-header-card,
@@ -3032,45 +2957,49 @@ const userContextMessage = computed(() => {
 }
 
 .summary-pill {
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 12px;
-  background: var(--notion-bg);
+  font-size: var(--idds-caption-small-size);
+  background: var(--ina-background-primary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .summary-pill.success {
-  background: var(--notion-green-bg);
-  border-color: var(--notion-green-border);
+  background: var(--ina-positive-50);
+  border-color: var(--ina-positive-300);
 }
 
 .summary-pill.warning {
-  background: var(--notion-amber-bg);
-  border-color: var(--notion-amber-border);
+  background: var(--ina-warning-50);
+  border-color: var(--ina-warning-300);
 }
 
 .implementation-header-side {
-  border: 1px dashed var(--notion-border);
+  border: 1px dashed var(--ina-stroke-primary);
   border-radius: 8px;
   padding: 12px;
 }
 
 .implementation-side-label {
   margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .implementation-side-file {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .implementation-side-meta {
   margin: 4px 0 10px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .implementation-checklist-top {
@@ -3091,31 +3020,32 @@ const userContextMessage = computed(() => {
 .implementation-add-row input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
 }
 
 .implementation-add-row .input-invalid {
-  border-color: var(--notion-red);
+  border-color: var(--ina-negative-600);
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
 .form-hint {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .form-hint.error {
-  color: var(--notion-red);
+  color: var(--ina-negative-600);
 }
 
 .implementation-checklist-card select {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
 }
 
 .implementation-checklist-card td .badge {
@@ -3145,13 +3075,15 @@ const userContextMessage = computed(() => {
 
 .implementation-status-text {
   margin-top: 4px;
-  font-size: 11px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .muted {
-  color: var(--notion-text-secondary);
-  font-size: 13px;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .detail-loading {
@@ -3159,7 +3091,8 @@ const userContextMessage = computed(() => {
 }
 
 .deploy-date {
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .modal-label-spaced {
@@ -3169,22 +3102,23 @@ const userContextMessage = computed(() => {
 
 .modal-optional {
   color: #94a3b8;
-  font-weight: 400;
+  font-weight: var(--idds-weight-regular);
 }
 
 .action-modal-copy {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #4b5563;
-  line-height: 1.55;
+  line-height: var(--idds-caption-line);
 }
 
 .action-modal-label {
   display: block;
   margin-bottom: 6px;
   color: #374151;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .action-modal-textarea {
@@ -3192,14 +3126,14 @@ const userContextMessage = computed(() => {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 10px 12px;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
   resize: vertical;
 }
 
 .action-modal-textarea:focus {
   outline: none;
-  border-color: var(--notion-blue);
+  border-color: var(--ina-primary-primary);
   box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.08);
 }
 
@@ -3209,7 +3143,7 @@ const userContextMessage = computed(() => {
 }
 
 .text-danger {
-  color: var(--notion-red);
+  color: var(--ina-negative-600);
 }
 
 .spinner-small {
@@ -3227,28 +3161,30 @@ const userContextMessage = computed(() => {
 
 .unit-doc-readonly-note {
   margin-top: 8px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
-  background: var(--notion-muted-surface);
-  border: 1px solid var(--notion-border);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  background: var(--ina-background-secondary);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 999px;
   padding: 6px 10px;
   display: inline-flex;
   align-items: center;
+  line-height: var(--idds-caption-small-line);
 }
 
 .unit-doc-stage-lock {
   margin-top: 8px;
-  font-size: 12px;
-  color: var(--notion-text-tertiary);
-  background: var(--notion-muted-surface);
-  border: 1px dashed var(--notion-border);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-tertiary);
+  background: var(--ina-background-secondary);
+  border: 1px dashed var(--ina-stroke-primary);
   border-radius: 999px;
   padding: 6px 10px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-style: italic;
+  line-height: var(--idds-caption-small-line);
 }
 
 .security-review-card {
@@ -3256,9 +3192,10 @@ const userContextMessage = computed(() => {
 }
 
 .security-subtitle {
-  font-size: 13.5px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
   margin: -10px 0 20px;
+  line-height: var(--idds-caption-line);
 }
 
 /* Status Card */
@@ -3304,16 +3241,18 @@ const userContextMessage = computed(() => {
   flex: 1;
 }
 .sec-status-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--idds-letter-spacing);
   color: #94a3b8;
+  line-height: var(--idds-caption-small-line);
 }
 .sec-status-value {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
   color: #1e293b;
+  line-height: var(--idds-body-small-line);
 }
 .sec-status--pass .sec-status-value { color: #15803d; }
 .sec-status--fail .sec-status-value { color: #b91c1c; }
@@ -3321,9 +3260,10 @@ const userContextMessage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   color: #64748b;
   text-align: right;
+  line-height: var(--idds-caption-small-line);
 }
 
 /* Form */
@@ -3342,24 +3282,27 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   color: #374151;
+  line-height: var(--idds-caption-line);
 }
-.sec-required { color: #ef4444; font-size: 13px; }
+.sec-required { color: #ef4444; font-size: var(--idds-caption-size); line-height: var(--idds-caption-line); }
 .sec-optional {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-medium);
   color: #94a3b8;
   background: #f1f5f9;
   border-radius: 4px;
   padding: 1px 6px;
   text-transform: lowercase;
+  line-height: var(--idds-caption-small-line);
 }
 .sec-form-hint {
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   color: #94a3b8;
   margin: 0;
+  line-height: var(--idds-caption-small-line);
 }
 .sec-select-wrap {
   position: relative;
@@ -3372,14 +3315,15 @@ const userContextMessage = computed(() => {
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #1e293b;
   cursor: pointer;
   transition: border-color 0.15s;
+  line-height: var(--idds-caption-line);
 }
 .sec-select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
-.sec-select--pass { border-color: #86efac; background: #f0fdf4; color: #15803d; font-weight: 600; }
-.sec-select--fail { border-color: #fca5a5; background: #fff1f2; color: #b91c1c; font-weight: 600; }
+.sec-select--pass { border-color: #86efac; background: #f0fdf4; color: #15803d; font-weight: var(--idds-weight-semibold); }
+.sec-select--fail { border-color: #fca5a5; background: #fff1f2; color: #b91c1c; font-weight: var(--idds-weight-semibold); }
 .sec-select-chevron {
   position: absolute;
   right: 12px;
@@ -3394,20 +3338,21 @@ const userContextMessage = computed(() => {
   border: 1.5px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
-  font-size: 13.5px;
+  font-size: var(--idds-caption-size);
   color: #1e293b;
   resize: vertical;
   transition: border-color 0.15s;
   font-family: inherit;
-  line-height: 1.6;
+  line-height: var(--idds-caption-line);
 }
 .sec-textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
-.sec-textarea::placeholder { color: #cbd5e1; font-size: 13px; }
+.sec-textarea::placeholder { color: #cbd5e1; font-size: var(--idds-caption-size); line-height: var(--idds-caption-line); }
 .sec-char-count {
-  font-size: 11.5px;
+  font-size: var(--idds-caption-small-size);
   color: #94a3b8;
   text-align: right;
   margin-top: 2px;
+  line-height: var(--idds-caption-small-line);
 }
 
 /* Actions */
@@ -3426,8 +3371,9 @@ const userContextMessage = computed(() => {
   background: #fff1f2;
   border: 1px solid #fca5a5;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #b91c1c;
+  line-height: var(--idds-caption-line);
 }
 .sec-error svg { flex-shrink: 0; color: #ef4444; }
 .sec-save-btn {
@@ -3450,9 +3396,10 @@ const userContextMessage = computed(() => {
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #1d4ed8;
   margin-bottom: 4px;
+  line-height: var(--idds-caption-line);
 }
 .sec-info-hint svg { flex-shrink: 0; }
 
@@ -3470,9 +3417,10 @@ const userContextMessage = computed(() => {
   border-radius: 10px;
   border: 2px solid transparent;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   text-align: left;
   transition: all 0.15s ease;
+  line-height: var(--idds-caption-line);
 }
 .sec-verdict-btn span {
   display: flex;
@@ -3480,14 +3428,15 @@ const userContextMessage = computed(() => {
   gap: 2px;
 }
 .sec-verdict-btn strong {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-line);
 }
 .sec-verdict-btn small {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-regular);
   opacity: 0.85;
+  line-height: var(--idds-caption-small-line);
 }
 .sec-verdict-btn svg { flex-shrink: 0; }
 
@@ -3518,10 +3467,11 @@ const userContextMessage = computed(() => {
   box-shadow: none;
 }
 .sec-verdict-note {
-  font-size: 11.5px;
+  font-size: var(--idds-caption-small-size);
   color: #94a3b8;
   margin: 8px 0 0;
   font-style: italic;
+  line-height: var(--idds-caption-small-line);
 }
 
 /* History */
@@ -3533,12 +3483,13 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--idds-letter-spacing);
   color: #94a3b8;
   margin-bottom: 14px;
+  line-height: var(--idds-caption-small-line);
 }
 .sec-history-list {
   display: flex;
@@ -3577,15 +3528,16 @@ const userContextMessage = computed(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
-  font-size: 12.5px;
+  font-size: var(--idds-caption-small-size);
   color: #64748b;
+  line-height: var(--idds-caption-small-line);
 }
-.sec-history-meta strong { color: #1e293b; font-size: 13px; }
+.sec-history-meta strong { color: #1e293b; font-size: var(--idds-caption-size); line-height: var(--idds-caption-line); }
 .sec-history-body {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--idds-caption-size);
   color: #374151;
-  line-height: 1.6;
+  line-height: var(--idds-caption-line);
   white-space: pre-wrap;
 }
 .sec-history-empty {
@@ -3595,14 +3547,19 @@ const userContextMessage = computed(() => {
   padding: 16px;
   background: #f8fafc;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #94a3b8;
+  line-height: var(--idds-caption-line);
 }
 .sec-history-empty svg { color: #cbd5e1; }
 
 @media (max-width: 900px) {
   .unit-doc-grid {
     grid-template-columns: 1fr;
+  }
+
+  .unit-doc-item {
+    min-height: 0;
   }
 
   .implementation-header-card {
@@ -3619,71 +3576,19 @@ const userContextMessage = computed(() => {
   }
 }
 
-@media (max-width: 1200px) {
-  .unit-doc-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 /* ===== STEPPER / TIMELINE PROGRESS ===== */
 .uk-stepper-wrap {
   margin: 20px 20px 0;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   border: 1px solid rgba(228, 224, 213, 0.8);
-  border-radius: var(--notion-radius-lg);
-  box-shadow: var(--notion-shadow-card);
+  border-radius: var(--ina-radius-xl);
+  box-shadow: var(--ina-shadow-base);
   padding: 20px 24px 24px;
   overflow: hidden;
 }
 
 .uk-stepper-header {
   margin-bottom: 24px;
-}
-
-.unit-doc-upload {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.unit-doc-picker {
-  display: block;
-  cursor: pointer;
-}
-
-.unit-doc-picker-input {
-  display: none;
-}
-
-.unit-doc-picker-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px 12px;
-  border: 1.5px dashed var(--notion-border);
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
-  background: var(--notion-muted-surface);
-  transition: border-color 0.15s, background 0.15s;
-  box-sizing: border-box;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.unit-doc-picker:hover .unit-doc-picker-button {
-  border-color: var(--notion-blue);
-  background: #eef2fb;
-  color: var(--notion-blue);
-}
-
-.unit-doc-upload-btn--full {
-  width: 100%;
-  justify-content: center;
 }
 
 /* Stage lock card */
@@ -3711,16 +3616,17 @@ const userContextMessage = computed(() => {
 }
 
 .unit-doc-stage-lock-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   color: #4b5563;
   margin-bottom: 2px;
+  line-height: var(--idds-caption-line);
 }
 
 .unit-doc-stage-lock-desc {
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
-  line-height: 1.4;
+  line-height: var(--idds-caption-line);
 }
 
 /* Konteks Box (Next Action) */
@@ -3728,7 +3634,7 @@ const userContextMessage = computed(() => {
   display: flex;
   gap: 16px;
   padding: 20px;
-  border-radius: 12px;
+  border-radius: 8px;
   margin: 16px 20px 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid transparent;
@@ -3779,15 +3685,15 @@ const userContextMessage = computed(() => {
 
 .uk-context-title {
   margin: 0 0 6px 0;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-body-small-line);
 }
 
 .uk-context-desc {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 /* Empty doc state */
@@ -3796,8 +3702,9 @@ const userContextMessage = computed(() => {
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  font-size: 13px;
-  color: var(--notion-text-tertiary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-tertiary);
+  line-height: var(--idds-caption-line);
 }
 
 .uk-stepper-title-row {
@@ -3809,25 +3716,28 @@ const userContextMessage = computed(() => {
 
 .uk-stepper-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--notion-text);
-  letter-spacing: -0.01em;
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-body-small-line);
 }
 
 .uk-stepper-special-badge {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--notion-red-bg);
-  color: var(--notion-red);
+  background: var(--ina-negative-50);
+  color: var(--ina-negative-600);
+  line-height: var(--idds-caption-small-line);
 }
 
 .uk-stepper-subtitle {
   margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 
 /* === Stepper track === */
@@ -3856,7 +3766,7 @@ const userContextMessage = computed(() => {
   left: 50%;
   width: 100%;
   height: 3px;
-  background: var(--notion-border);
+  background: var(--ina-stroke-primary);
   z-index: 0;
   border-radius: 3px;
 }
@@ -3864,7 +3774,7 @@ const userContextMessage = computed(() => {
 .uk-step-connector-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #1e3a8a, #3b5bdb);
+  background: var(--ina-primary-primary);
   transition: width 0.5s ease;
   border-radius: 2px;
 }
@@ -3887,18 +3797,19 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
   transition: all 0.3s ease;
-  border: 2px solid var(--notion-border);
-  background: var(--notion-bg);
-  color: var(--notion-text-secondary);
+  border: 2px solid var(--ina-stroke-primary);
+  background: var(--ina-background-primary);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 
 /* Done state */
 .uk-step--done .uk-step-icon {
-  background: linear-gradient(135deg, #1e3a8a, #3b5bdb);
-  border-color: #1e3a8a;
+  background: var(--ina-primary-primary);
+  border-color: var(--ina-primary-primary);
   color: #fff;
   box-shadow: 0 4px 12px rgba(30, 58, 138, 0.35);
 }
@@ -3924,8 +3835,9 @@ const userContextMessage = computed(() => {
 }
 
 .uk-step-num {
-  font-size: 13px;
-  color: var(--notion-text-tertiary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-tertiary);
+  line-height: var(--idds-caption-line);
 }
 
 /* Body */
@@ -3935,10 +3847,10 @@ const userContextMessage = computed(() => {
 }
 
 .uk-step-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--notion-text-secondary);
-  line-height: 1.3;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
   margin-bottom: 4px;
   transition: color 0.2s;
 }
@@ -3948,20 +3860,20 @@ const userContextMessage = computed(() => {
 }
 
 .uk-step--active .uk-step-label {
-  color: var(--notion-text);
-  font-weight: 800;
+  color: var(--ina-content-primary);
+  font-weight: var(--idds-weight-bold);
 }
 
 .uk-step-desc {
-  font-size: 11px;
-  color: var(--notion-text-tertiary);
-  line-height: 1.4;
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-tertiary);
+  line-height: var(--idds-caption-small-line);
   max-width: 120px;
   margin: 0 auto;
 }
 
 .uk-step--active .uk-step-desc {
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 @media (max-width: 768px) {
@@ -4032,11 +3944,40 @@ const userContextMessage = computed(() => {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 20px 24px;
-  margin: 0 20px !important;
+  margin: 0;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
+}
+
+.detail-hero-text {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.detail-hero-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.workflow-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workflow-action-btn {
+  min-height: 42px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  white-space: nowrap;
+  line-height: var(--idds-caption-line);
 }
 
 .actions-header-inline {
@@ -4048,14 +3989,14 @@ const userContextMessage = computed(() => {
 }
 
 .actions-card {
-  margin: 0 20px !important;
+  margin: 0;
   padding: 16px 20px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   border-color: rgba(228, 224, 213, 1);
 }
 
 .detail-tabs-card {
-  margin: 14px 20px 0 !important;
+  margin: 14px 0 0;
   padding: 18px 24px 0;
   border-bottom: 0;
   border-bottom-left-radius: 0;
@@ -4065,7 +4006,7 @@ const userContextMessage = computed(() => {
 }
 
 .detail-tabs {
-  border-bottom: 1px solid var(--notion-border);
+  border-bottom: 1px solid var(--ina-stroke-primary);
   display: flex;
   gap: 6px;
   margin: 0;
@@ -4079,12 +4020,13 @@ const userContextMessage = computed(() => {
   padding: 8px 14px;
   border-radius: 8px;
   white-space: nowrap;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .detail-tab-panel {
-  margin: 0 20px 20px !important;
+  margin: 0 0 20px;
   border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
@@ -4104,7 +4046,7 @@ const userContextMessage = computed(() => {
   gap: 16px;
   margin-top: 22px;
   padding-top: 18px;
-  border-top: 1px solid var(--notion-border);
+  border-top: 1px solid var(--ina-stroke-primary);
 }
 
 .detail-danger-copy {
@@ -4113,17 +4055,18 @@ const userContextMessage = computed(() => {
 
 .detail-danger-copy h5 {
   margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
   color: #991b1b;
+  line-height: var(--idds-caption-line);
 }
 
 .detail-danger-copy p {
   margin: 0;
   max-width: 560px;
-  color: var(--notion-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .detail-danger-btn {
@@ -4140,25 +4083,25 @@ const userContextMessage = computed(() => {
 
 .detail-tab-panel .checklist-title {
   color: var(--ui-text) !important;
-  font-family: var(--notion-font-brand);
-  font-size: 17px !important;
-  font-weight: 800 !important;
-  line-height: 1.35 !important;
-  letter-spacing: 0 !important;
+  font-family: var(--ui-font-display);
+  font-size: var(--idds-body-size) !important;
+  font-weight: var(--idds-weight-bold) !important;
+  line-height: var(--idds-body-line) !important;
+  letter-spacing: var(--idds-letter-spacing) !important;
 }
 
 .detail-tab-panel .checklist-title svg {
-  color: var(--notion-blue);
+  color: var(--ina-primary-primary);
 }
 
 .detail-tab-panel .checklist-add-form {
-  background: var(--notion-bg-secondary);
+  background: var(--ina-background-secondary);
   border-radius: 10px;
   box-shadow: none;
 }
 
 .detail-tab-panel .checklist-items-list {
-  border-top: 1px solid var(--notion-border);
+  border-top: 1px solid var(--ina-stroke-primary);
 }
 
 .detail-tab-panel .checklist-item-row {
@@ -4175,43 +4118,44 @@ const userContextMessage = computed(() => {
 
 .detail-tab-panel .checklist-item-title {
   white-space: normal;
-  line-height: 1.45;
+  line-height: var(--idds-caption-line);
 }
 
 .detail-tab-panel .checklist-note-input-inline,
 .detail-tab-panel .checklist-status-select {
   min-height: 36px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .detail-tab-panel .empty-message svg {
-  color: var(--notion-text-tertiary);
+  color: var(--ina-content-tertiary);
   opacity: 0.55;
   margin-bottom: 10px;
 }
 
 .confirm-delete-note {
   margin: 10px 0 0;
-  color: var(--notion-text-secondary);
-  font-size: 13.5px;
-  line-height: 1.5;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .confirm-delete-preview {
   margin-top: 14px;
   padding: 14px 16px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-muted-surface);
+  background: var(--ina-background-secondary);
 }
 
 .confirm-delete-preview p {
   display: -webkit-box;
   margin: 8px 0 0;
-  color: var(--notion-text-primary);
-  font-size: 14px;
-  line-height: 1.55;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
@@ -4231,9 +4175,9 @@ const userContextMessage = computed(() => {
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg-secondary);
+  background: var(--ina-background-secondary);
 }
 
 .technical-config-tab {
@@ -4242,30 +4186,31 @@ const userContextMessage = computed(() => {
   align-items: center;
   gap: 7px;
   padding: 8px 12px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 8px;
   background: #fff;
-  color: var(--notion-text-secondary);
-  font-size: 13.5px;
-  font-weight: 700;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  line-height: var(--idds-caption-line);
 }
 
 .technical-config-tab:hover {
   border-color: rgba(31, 63, 147, 0.35);
-  color: var(--notion-blue);
-  background: var(--notion-blue-bg);
+  color: var(--ina-primary-primary);
+  background: var(--ina-primary-50);
 }
 
 .technical-config-tab.active {
-  background: var(--notion-blue);
-  border-color: var(--notion-blue);
+  background: var(--ina-primary-primary);
+  border-color: var(--ina-primary-primary);
   color: #fff;
 }
 
 .technical-config-content {
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
   background: #fff;
   overflow: hidden;
@@ -4277,29 +4222,31 @@ const userContextMessage = computed(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
-  border-bottom: 1px solid var(--notion-border);
-  background: var(--notion-bg-secondary);
+  border-bottom: 1px solid var(--ina-stroke-primary);
+  background: var(--ina-background-secondary);
 }
 
 .technical-config-content-head h4 {
   margin: 0;
   color: var(--ui-text);
-  font-family: var(--notion-font-brand);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0;
+  font-family: var(--ui-font-display);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-body-small-line);
 }
 
 .technical-config-count {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 999px;
   background: #fff;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-small-line);
 }
 
 .technical-config-groups {
@@ -4315,11 +4262,12 @@ const userContextMessage = computed(() => {
 
 .technical-config-group h5 {
   margin: 0;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  letter-spacing: var(--idds-letter-spacing);
   text-transform: uppercase;
+  line-height: var(--idds-caption-small-line);
 }
 
 .technical-config-items {
@@ -4329,19 +4277,20 @@ const userContextMessage = computed(() => {
 }
 
 .technical-config-item {
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg-secondary);
+  background: var(--ina-background-secondary);
   overflow: hidden;
 }
 
 .technical-config-item-title {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--notion-border);
-  color: var(--notion-text);
-  font-size: 14px;
-  font-weight: 800;
+  border-bottom: 1px solid var(--ina-stroke-primary);
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
   word-break: break-word;
+  line-height: var(--idds-caption-line);
 }
 
 .technical-config-kv {
@@ -4361,17 +4310,19 @@ const userContextMessage = computed(() => {
 }
 
 .technical-config-row span {
-  color: var(--notion-text-secondary);
-  font-size: 12.5px;
-  font-weight: 700;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-small-line);
 }
 
 .technical-config-row strong {
-  color: var(--notion-text);
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   text-align: right;
   word-break: break-word;
+  line-height: var(--idds-caption-line);
 }
 
 .technical-config-empty {
@@ -4381,16 +4332,17 @@ const userContextMessage = computed(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px dashed var(--notion-border);
+  border: 1px dashed var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg-secondary);
-  color: var(--notion-text-secondary);
-  font-size: 13.5px;
+  background: var(--ina-background-secondary);
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
   text-align: center;
+  line-height: var(--idds-caption-line);
 }
 
 .technical-config-empty svg {
-  color: var(--notion-text-tertiary);
+  color: var(--ina-content-tertiary);
   opacity: 0.7;
 }
 
@@ -4401,6 +4353,20 @@ const userContextMessage = computed(() => {
     margin-bottom: 0;
     padding-bottom: 14px;
   }
+  .detail-hero-actions,
+  .workflow-action-buttons {
+    width: 100%;
+  }
+
+  .workflow-action-buttons {
+    justify-content: stretch;
+  }
+
+  .workflow-action-btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
   .actions-header-inline {
     flex-direction: column;
     align-items: flex-start;
@@ -4463,7 +4429,8 @@ const userContextMessage = computed(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .dh-bc-link {
@@ -4472,11 +4439,12 @@ const userContextMessage = computed(() => {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .dh-bc-link:hover {
@@ -4489,21 +4457,23 @@ const userContextMessage = computed(() => {
 
 .dh-bc-current {
   color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
 }
 
 .detail-hero-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h5-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-heading-h5-line);
 }
 
 .detail-hero-sub {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.6);
+  line-height: var(--idds-caption-line);
 }
 
 .detail-hero-refresh {
@@ -4511,8 +4481,8 @@ const userContextMessage = computed(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-medium);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.1);
@@ -4520,6 +4490,7 @@ const userContextMessage = computed(() => {
   cursor: pointer;
   transition: all 0.15s;
   flex-shrink: 0;
+  line-height: var(--idds-caption-line);
 }
 
 .detail-hero-refresh:hover:not(:disabled) {
@@ -4562,13 +4533,14 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
   background: #e2e8f0;
   color: #64748b;
   border: 2px solid #cbd5e1;
   flex-shrink: 0;
   transition: all 0.2s ease;
+  line-height: var(--idds-caption-line);
 }
 .deploy-step--done .deploy-step-circle {
   background: #16a34a;
@@ -4606,27 +4578,29 @@ const userContextMessage = computed(() => {
   margin-bottom: 8px;
 }
 .deploy-step-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
   color: #1e293b;
   margin: 0 0 4px;
+  line-height: var(--idds-body-small-line);
 }
 .deploy-step--locked .deploy-step-title {
   color: #94a3b8;
 }
 .deploy-step-desc {
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #64748b;
   margin: 0;
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 .deploy-env-badge {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-semibold);
   padding: 3px 10px;
   border-radius: 20px;
   white-space: nowrap;
   flex-shrink: 0;
+  line-height: var(--idds-caption-small-line);
 }
 .deploy-badge--done {
   background: #dcfce7;
@@ -4644,12 +4618,13 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
   color: #4b5563;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   border-radius: 8px;
   padding: 8px 12px;
+  line-height: var(--idds-caption-line);
 }
 .deploy-done-info svg { flex-shrink: 0; color: #16a34a; }
 .deploy-step-action {
@@ -4662,8 +4637,9 @@ const userContextMessage = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 .deploy-confirm-btn--production {
   background: #16a34a;
@@ -4678,50 +4654,47 @@ const userContextMessage = computed(() => {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11.5px;
+  font-size: var(--idds-caption-small-size);
   color: #d97706;
   margin: 0;
   font-style: italic;
+  line-height: var(--idds-caption-small-line);
 }
 .deploy-production-warning svg { flex-shrink: 0; }
 
-/* Deploy Modal env badge */
-.deploy-modal-env-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
+.deploy-confirmation-visual {
+  display: grid;
+  justify-items: center;
+  gap: var(--ina-spacing-2);
+  padding: 0 0 var(--ina-spacing-3);
+  text-align: center;
 }
-.deploy-modal-env-badge.env-staging {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+
+.deploy-confirmation-visual img {
+  width: min(280px, 100%);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  animation: deployment-float 3.4s ease-in-out infinite;
 }
-.deploy-modal-env-badge.env-production {
-  background: #f0fdf4;
-  color: #15803d;
-  border: 1px solid #bbf7d0;
+
+.deploy-confirmation-visual p {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
-.deploy-modal-textarea {
-  width: 100%;
-  margin-top: 8px;
-  padding: 12px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: inherit;
-  resize: vertical;
-  color: #1e293b;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
+
+@keyframes deployment-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
-.deploy-modal-textarea:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+
+@media (prefers-reduced-motion: reduce) {
+  .deploy-confirmation-visual img {
+    animation: none;
+  }
 }
 
 
@@ -4734,7 +4707,8 @@ const userContextMessage = computed(() => {
   }
 
   .detail-hero-title {
-    font-size: 18px;
+    font-size: var(--idds-body-size);
+    line-height: var(--idds-body-line);
   }
 
   .detail-info-card {
@@ -4755,8 +4729,124 @@ const userContextMessage = computed(() => {
 }
 .deployment-status-header h3 {
   margin: 0 0 4px;
-  font-size: 18px;
+  font-size: var(--idds-body-size);
   color: #1e3a8a;
+  line-height: var(--idds-body-line);
+}
+
+/* Unified detail workspace */
+.app-detail-container {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.detail-root-state {
+  min-height: 320px;
+  display: grid;
+  align-items: center;
+}
+
+.uk-stepper-wrap,
+.detail-tabs-card,
+.detail-tab-panel,
+.detail-info-card,
+.unit-doc-card,
+.uk-context-box,
+.actions-card {
+  margin: 0;
+}
+
+.detail-tabs-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.detail-tabs {
+  gap: 18px;
+  padding: 0;
+  border-bottom: 1px solid var(--ui-border);
+  scrollbar-width: thin;
+}
+
+.detail-tabs-card .detail-tabs button {
+  min-height: 44px;
+  padding: 10px 2px 9px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  color: var(--ui-text-muted);
+  background: transparent;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-bold);
+  line-height: var(--idds-caption-line);
+}
+
+.detail-tabs-card .detail-tabs button:hover {
+  color: var(--ui-primary);
+  background: transparent;
+}
+
+.detail-tabs-card .detail-tabs button.active {
+  border-bottom-color: var(--ui-primary);
+  color: var(--ui-primary);
+  background: transparent;
+}
+
+.detail-tab-panel,
+.unit-doc-card,
+.uk-stepper-wrap {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-xs);
+}
+
+.detail-tab-panel {
+  padding: 22px;
+}
+
+.unit-doc-card {
+  padding: 20px;
+}
+
+.uk-stepper-wrap {
+  padding: 20px 22px;
+}
+
+.unit-doc-desc {
+  min-height: 42px;
+  margin-bottom: 10px;
+}
+
+.unit-doc-actions:empty {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-detail-container {
+    gap: 16px;
+  }
+
+  .detail-tabs {
+    gap: 14px;
+    overflow-x: auto;
+  }
+
+  .detail-tab-panel,
+  .unit-doc-card,
+  .uk-stepper-wrap {
+    padding: 16px;
+  }
+
+  .unit-doc-desc {
+    min-height: 0;
+  }
+
+  .detail-hero-text {
+    flex-basis: auto;
+  }
 }
 </style>
 

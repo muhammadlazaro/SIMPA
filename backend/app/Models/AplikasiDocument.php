@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $aplikasi_id
  * @property AplikasiJenisDokumen|string $document_type
  * @property string $storage_path
+ * @property string $storage_disk
  * @property string $original_filename
  * @property string|null $mime_type
  * @property int|null $file_size
@@ -27,6 +28,7 @@ class AplikasiDocument extends Model
         'aplikasi_id',
         'document_type',
         'storage_path',
+        'storage_disk',
         'original_filename',
         'mime_type',
         'file_size',

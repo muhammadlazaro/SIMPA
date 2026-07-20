@@ -4,38 +4,118 @@ import http from '../lib/http'
 import { useAuthStore } from '../stores/auth'
 import { warnDev } from '../utils/logger'
 
+const protectedRoutes = [
+  {
+    path: '/admin-sistem',
+    name: 'admin-sistem',
+    component: () => import('../views/AdminSistemDashboard.vue'),
+    meta: { title: 'Kelola Personil' },
+  },
+  {
+    path: '/pengelola-aplikasi',
+    name: 'pengelola-aplikasi',
+    component: () => import('../views/PengelolaDashboard.vue'),
+    meta: { title: 'Kelola Aplikasi' },
+  },
+  {
+    path: '/pengelola-aplikasi/rfc',
+    name: 'pengelola-aplikasi-rfc',
+    component: () => import('../views/PengelolaRfc.vue'),
+    meta: { title: 'Daftar RFC' },
+  },
+  {
+    path: '/pengelola-aplikasi/app/:id',
+    name: 'pengelola-aplikasi-app-detail',
+    component: () => import('../views/PengelolaAppDetail.vue'),
+    meta: { title: 'Detail Aplikasi' },
+  },
+  {
+    path: '/analis-desain',
+    name: 'analis-desain',
+    component: () => import('../views/AnalisDashboard.vue'),
+    meta: { title: 'Antrian Analisis' },
+  },
+  {
+    path: '/analis-desain/app/:id',
+    name: 'analis-desain-app-detail',
+    component: () => import('../views/AnalisAppDetail.vue'),
+    meta: { title: 'Detail Analisis' },
+  },
+  {
+    path: '/unit-kerja',
+    name: 'unit-kerja',
+    component: () => import('../views/UnitKerjaDashboard.vue'),
+    meta: { title: 'Pengajuan Saya' },
+  },
+  {
+    path: '/unit-kerja/rfc',
+    name: 'unit-kerja-rfc',
+    component: () => import('../views/UnitKerjaRfc.vue'),
+    meta: { title: 'Pengajuan RFC' },
+  },
+  {
+    path: '/unit-kerja/app/:id',
+    name: 'unit-kerja-app-detail',
+    component: () => import('../views/UnitKerjaAppDetail.vue'),
+    meta: { title: 'Detail Pengajuan' },
+  },
+  {
+    path: '/tim-uji-keamanan',
+    name: 'tim-uji-keamanan',
+    component: () => import('../views/UserDashboard.vue'),
+    meta: { title: 'Uji Keamanan' },
+  },
+  {
+    path: '/tim-uji-keamanan/app/:id',
+    name: 'tim-uji-keamanan-app-detail',
+    component: () => import('../views/TimUjiKeamananAppDetail.vue'),
+    meta: { title: 'Detail Uji Keamanan' },
+  },
+  {
+    path: '/tim-implementasi-aplikasi',
+    name: 'tim-implementasi-aplikasi',
+    component: () => import('../views/UserDashboard.vue'),
+    meta: { title: 'Implementasi Aplikasi' },
+  },
+  {
+    path: '/tim-implementasi-aplikasi/app/:id',
+    name: 'tim-implementasi-aplikasi-app-detail',
+    component: () => import('../views/UserAppDetail.vue'),
+    meta: { title: 'Detail Implementasi' },
+  },
+  {
+    path: '/devops-developer',
+    name: 'devops-developer',
+    component: () => import('../views/UserDashboard.vue'),
+    meta: { title: 'Deployment Aplikasi' },
+  },
+  {
+    path: '/devops-developer/app/:id',
+    name: 'devops-developer-app-detail',
+    component: () => import('../views/DevopsAppDetail.vue'),
+    meta: { title: 'Detail Deployment' },
+  },
+]
+
 const routes = [
   { path: '/', redirect: '/login' },
-  { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
-  
-  // Admin Sistem routes
-  { path: '/admin-sistem', name: 'admin-sistem', component: () => import('../views/AdminSistemDashboard.vue') },
-
-  // Pengelola Aplikasi routes
-  { path: '/pengelola-aplikasi', name: 'pengelola-aplikasi', component: () => import('../views/PengelolaDashboard.vue') },
-  { path: '/pengelola-aplikasi/rfc', name: 'pengelola-aplikasi-rfc', component: () => import('../views/PengelolaRfc.vue') },
-  { path: '/pengelola-aplikasi/app/:id', name: 'pengelola-aplikasi-app-detail', component: () => import('../views/PengelolaAppDetail.vue') },
-  
-  // Analis Desain routes
-  { path: '/analis-desain', name: 'analis-desain', component: () => import('../views/AnalisDashboard.vue') },
-  { path: '/analis-desain/app/:id', name: 'analis-desain-app-detail', component: () => import('../views/AnalisAppDetail.vue') },
-
-  // Unit Kerja routes
-  { path: '/unit-kerja', name: 'unit-kerja', component: () => import('../views/UnitKerjaDashboard.vue') },
-  { path: '/unit-kerja/rfc', name: 'unit-kerja-rfc', component: () => import('../views/UnitKerjaRfc.vue') },
-  { path: '/unit-kerja/app/:id', name: 'unit-kerja-app-detail', component: () => import('../views/UnitKerjaAppDetail.vue') },
-
-  // Tim Uji Keamanan routes
-  { path: '/tim-uji-keamanan', name: 'tim-uji-keamanan', component: () => import('../views/UserDashboard.vue') },
-  { path: '/tim-uji-keamanan/app/:id', name: 'tim-uji-keamanan-app-detail', component: () => import('../views/TimUjiKeamananAppDetail.vue') },
-  
-  // Tim Implementasi Aplikasi routes
-  { path: '/tim-implementasi-aplikasi', name: 'tim-implementasi-aplikasi', component: () => import('../views/UserDashboard.vue') },
-  { path: '/tim-implementasi-aplikasi/app/:id', name: 'tim-implementasi-aplikasi-app-detail', component: () => import('../views/UserAppDetail.vue') },
-  
-  // DevOps Developer routes
-  { path: '/devops-developer', name: 'devops-developer', component: () => import('../views/UserDashboard.vue') },
-  { path: '/devops-developer/app/:id', name: 'devops-developer-app-detail', component: () => import('../views/DevopsAppDetail.vue') },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: 'Masuk' },
+  },
+  {
+    path: '/',
+    component: () => import('../layouts/AppShell.vue'),
+    children: protectedRoutes,
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('../views/NotFound.vue'),
+    meta: { title: 'Halaman Tidak Ditemukan', public: true },
+  },
 ]
 
 const router = createRouter({
@@ -96,7 +176,7 @@ router.beforeEach(async (to, from, next) => {
     const auth = useAuthStore()
     
     // If not authenticated and trying to access protected route
-    if (!auth.isAuthenticated && to.name !== 'login') {
+    if (!auth.isAuthenticated && to.name !== 'login' && !to.meta.public) {
       return next({ name: 'login' })
     }
 
@@ -124,6 +204,11 @@ router.beforeEach(async (to, from, next) => {
     // Fallback: redirect to login on error
     next({ name: 'login' })
   }
+})
+
+router.afterEach((to) => {
+  const title = typeof to.meta.title === 'string' ? to.meta.title : ''
+  document.title = title ? `${title} | SIMPA` : 'SIMPA'
 })
 
 export default router

@@ -1,18 +1,32 @@
 <script setup>
+import {
+  Button,
+  Modal,
+  PasswordInput,
+  TextField,
+} from '@idds/vue'
+import {
+  IconCheck,
+  IconPlus,
+} from '@tabler/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useToastStore } from '../stores/toast'
 import { useAuthStore } from '../stores/auth'
 import { ROLE_DISPLAY_NAME } from '../constants/roles'
-import { usePagination } from '../composables/usePagination'
 import { warnDev } from '../utils/logger'
 import http from '../lib/http'
-import AdminSistemLayout from '../layouts/AdminSistemLayout.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import ConfirmationDrawer from '../components/ConfirmationDrawer.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import AsyncState from '../components/AsyncState.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
+import IddsSelect from '../components/IddsSelect.vue'
+import MetricCard from '../components/MetricCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 
-const router = useRouter()
 const toast = useToastStore()
 const auth = useAuthStore()
 
@@ -28,6 +42,7 @@ const ROLE_OPTIONS = [
 
 const personil = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const filters = ref({
   q: '',
@@ -43,11 +58,9 @@ const stats = ref({
 const pagination = ref({
   currentPage: 1,
   lastPage: 1,
-  perPage: 10,
+  perPage: 30,
   total: 0,
 })
-const { pageNumbers } = usePagination(pagination)
-
 const showFormModal = ref(false)
 const editingPersonil = ref(null)
 const formErrors = ref({})
@@ -67,6 +80,19 @@ const hasActiveFilter = computed(() =>
 )
 
 const adminSistemCount = computed(() => stats.value.roles?.admin_sistem || 0)
+const roleOptions = computed(() => ROLE_OPTIONS.map((role) => ({
+  label: roleLabel(role),
+  value: role,
+})))
+const roleFilterOptions = computed(() => [
+  { label: 'Seluruh role', value: 'all' },
+  ...roleOptions.value,
+])
+const statusFilterOptions = [
+  { label: 'Seluruh status', value: 'all' },
+  { label: 'Aktif', value: 'active' },
+  { label: 'Nonaktif', value: 'inactive' },
+]
 
 onMounted(async () => {
   await Promise.all([loadStats(), loadPersonil()])
@@ -98,6 +124,7 @@ async function loadStats() {
 
 async function loadPersonil(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const params = new URLSearchParams({
       page: String(page),
@@ -119,6 +146,7 @@ async function loadPersonil(page = 1) {
     }
   } catch (error) {
     warnDev('[AdminSistemDashboard] loadPersonil error:', error)
+    loadError.value = 'Daftar personil belum dapat dimuat. Periksa koneksi lalu coba lagi.'
     toast.push('Gagal memuat daftar personil', 'error')
   } finally {
     loading.value = false
@@ -136,6 +164,12 @@ function applyFilter() {
 
 function clearFilters() {
   filters.value = { q: '', role: 'all', status: 'all' }
+  loadPersonil(1)
+}
+
+function setQuickFilter({ role = 'all', status = 'all' } = {}) {
+  filters.value.role = role
+  filters.value.status = status
   loadPersonil(1)
 }
 
@@ -169,10 +203,6 @@ function confirmButtonLabel() {
   if (confirmDialog.value.type === 'restore') return 'Aktifkan'
   if (confirmDialog.value.type === 'force-delete') return 'Hapus Permanen'
   return 'Nonaktifkan'
-}
-
-function confirmButtonIcon() {
-  return confirmDialog.value.type === 'restore' ? 'refresh' : 'trash'
 }
 
 function openCreateModal() {
@@ -283,333 +313,275 @@ function fieldError(name) {
   const value = formErrors.value?.[name]
   return Array.isArray(value) ? value[0] : value
 }
+
+function handleFormModalChange(open) {
+  if (!open) closeFormModal()
+}
+
+function handleConfirmModalChange(open) {
+  if (!open) closeConfirm()
+}
 </script>
 
 <template>
-  <AdminSistemLayout>
-    <div class="container workspace-dashboard">
-      <div class="workspace-hero-card">
-        <div class="workspace-hero-text">
-          <nav class="workspace-hero-breadcrumb" aria-label="breadcrumb">
-            <button @click="router.push('/admin-sistem')" class="ah-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="ah-bc-sep">/</span>
-            <span class="ah-bc-current">Personil</span>
-          </nav>
-          <h2 class="workspace-hero-title">Manajemen Personil</h2>
-          <p class="workspace-hero-sub">Kelola akun, role, dan status akses personil SIMPA.</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Admin Sistem"
+      title="Manajemen personil"
+      description="Kelola akun, role, dan status akses personil SIMPA."
+    >
+      <template #actions>
+        <Button hierarchy="primary" size="lg" :prefix-icon="IconPlus" @click="openCreateModal">
+          Tambah Personil
+        </Button>
+      </template>
+    </PageHeader>
 
-      <div class="content-section active">
-        <div class="stats-grid">
-          <div class="stat-card total">
-            <div class="stat-header">
-              <span class="stat-label">Total Personil</span>
-              <div class="stat-icon-wrap bg-blue">
-                <Icons name="user" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.total }}</div>
+    <div class="ui-page-content">
+      <section class="ui-metric-grid" aria-label="Ringkasan personil">
+        <MetricCard
+          label="Total Personil"
+          :value="stats.total"
+          icon="user"
+          tone="blue"
+          interactive
+          :active="filters.role === 'all' && filters.status === 'all'"
+          @select="setQuickFilter()"
+        />
+        <MetricCard
+          label="Aktif"
+          :value="stats.active"
+          icon="check-circle"
+          tone="green"
+          interactive
+          :active="filters.status === 'active' && filters.role === 'all'"
+          @select="setQuickFilter({ status: 'active' })"
+        />
+        <MetricCard
+          label="Nonaktif"
+          :value="stats.inactive"
+          icon="alert-circle"
+          tone="red"
+          interactive
+          :active="filters.status === 'inactive' && filters.role === 'all'"
+          @select="setQuickFilter({ status: 'inactive' })"
+        />
+        <MetricCard
+          label="Admin Sistem"
+          :value="adminSistemCount"
+          icon="settings"
+          tone="amber"
+          interactive
+          :active="filters.role === 'admin_sistem'"
+          @select="setQuickFilter({ role: 'admin_sistem' })"
+        />
+      </section>
+
+      <section class="ui-panel" aria-labelledby="personil-list-title">
+        <header class="ui-panel-header">
+          <div>
+            <h2 id="personil-list-title">Daftar personil</h2>
+            <p class="ui-table-subtitle">{{ pagination.total }} akun sesuai filter</p>
           </div>
-
-          <div class="stat-card production">
-            <div class="stat-header">
-              <span class="stat-label">Aktif</span>
-              <div class="stat-icon-wrap bg-green">
-                <Icons name="check-circle" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.active }}</div>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="filters.q"
+              label="Cari personil"
+              placeholder="Cari personil"
+              @update:model-value="scheduleSearch"
+            />
+            <IddsSelect
+              v-model="filters.role"
+              :options="roleFilterOptions"
+              accessible-label="Filter role"
+              placeholder="Semua role"
+              width="190px"
+              @change="applyFilter"
+            />
+            <IddsSelect
+              v-model="filters.status"
+              :options="statusFilterOptions"
+              accessible-label="Filter status"
+              placeholder="Semua status"
+              width="170px"
+              @change="applyFilter"
+            />
           </div>
+        </header>
 
-          <div class="stat-card maintenance">
-            <div class="stat-header">
-              <span class="stat-label">Nonaktif</span>
-              <div class="stat-icon-wrap bg-red">
-                <Icons name="alert-circle" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.inactive }}</div>
-          </div>
-
-          <div class="stat-card dev">
-            <div class="stat-header">
-              <span class="stat-label">Admin Sistem</span>
-              <div class="stat-icon-wrap bg-amber">
-                <Icons name="settings" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ adminSistemCount }}</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <DataCardHead title="Daftar Personil">
-            <template #actions>
-              <div class="search-group">
-                <span class="search-icon">
-                  <Icons name="search" :size="16" />
-                </span>
-                <input
-                  v-model="filters.q"
-                  type="text"
-                  placeholder="Cari personil..."
-                  maxlength="100"
-                  aria-label="Cari personil"
-                  @input="scheduleSearch"
-                />
-              </div>
-
-              <select v-model="filters.role" class="filter-select" aria-label="Filter role" @change="applyFilter">
-                <option value="all">Semua Role</option>
-                <option v-for="role in ROLE_OPTIONS" :key="role" :value="role">
-                  {{ roleLabel(role) }}
-                </option>
-              </select>
-
-              <select v-model="filters.status" class="filter-select" aria-label="Filter status" @change="applyFilter">
-                <option value="all">Semua Status</option>
-                <option value="active">Aktif</option>
-                <option value="inactive">Nonaktif</option>
-              </select>
-
-              <button class="btn btn-primary" @click="openCreateModal">
-                <Icons name="plus" :size="16" />
-                Tambah Personil
-              </button>
-            </template>
-          </DataCardHead>
-
-          <div v-if="loading" class="loading-state">
-            <div class="loading-spinner"></div>
-            <p>Memuat data personil...</p>
-          </div>
-
-          <div v-else-if="personil.length === 0" class="global-empty">
-            <div class="global-empty-icon-wrapper">
-              <Icons :name="hasActiveFilter ? 'search' : 'inbox'" :size="48" class="global-empty-icon" />
-            </div>
-            <h3 class="global-empty-title">{{ hasActiveFilter ? 'Tidak Ada Hasil' : 'Belum Ada Personil' }}</h3>
-            <p class="global-empty-text">
-              {{ hasActiveFilter ? 'Tidak ada personil yang cocok dengan filter ini.' : 'Belum ada personil yang tercatat dalam sistem.' }}
-            </p>
-            <button v-if="hasActiveFilter" type="button" class="btn btn-secondary" @click="clearFilters">
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="personil.length === 0"
+          :empty-icon="hasActiveFilter ? 'search' : 'inbox'"
+          :empty-title="hasActiveFilter ? 'Personil tidak ditemukan' : 'Belum ada personil'"
+          :empty-description="hasActiveFilter
+            ? 'Sesuaikan pencarian atau hapus filter yang aktif.'
+            : 'Belum ada personil yang tercatat dalam sistem.'"
+          @retry="loadPersonil(pagination.currentPage)"
+        >
+          <template v-if="hasActiveFilter" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearFilters">
               Hapus filter
-            </button>
-            <button v-else type="button" class="btn btn-primary" @click="openCreateModal">
-              <Icons name="plus" :size="16" />
-              Tambah Personil
-            </button>
-          </div>
+            </Button>
+          </template>
 
-          <div v-else>
-            <DataTable>
-              <thead>
-                <tr>
-                  <th scope="col" class="col-num">#</th>
-                  <th scope="col">Nama</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" class="col-aksi">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, idx) in personil" :key="row.id" class="data-table-row">
-                  <td class="col-num">{{ rowNumber(idx) }}</td>
-                  <td>
-                    <div class="personil-name-cell">
-                      <span class="personil-name-main">{{ row.name }}</span>
-                      <span v-if="row.id === auth.user?.id" class="personil-name-sub">Akun Anda</span>
-                    </div>
-                  </td>
-                  <td class="personil-email">{{ row.email }}</td>
-                  <td>
-                    <span class="badge badge-info">{{ roleLabel(row.role) }}</span>
-                  </td>
-                  <td>
-                    <span :class="['badge', row.deleted_at ? 'badge-secondary' : 'badge-success']">
-                      {{ statusLabel(row) }}
-                    </span>
-                  </td>
-                  <td>
-                    <div class="action-group">
-                      <button type="button" class="action-btn table-action-btn edit-btn" @click="openEditModal(row)">
-                        <Icons name="edit" :size="14" />
-                        Edit
-                      </button>
-                      <button
-                        v-if="row.deleted_at"
-                        type="button"
-                        class="action-btn table-action-btn view-btn"
-                        @click="openConfirm('restore', row)"
-                      >
-                        <Icons name="refresh" :size="14" />
-                        Aktifkan
-                      </button>
-                      <button
-                        v-else
-                        type="button"
-                        class="action-btn table-action-btn delete-btn"
-                        :disabled="row.id === auth.user?.id"
-                        @click="openConfirm('deactivate', row)"
-                      >
-                        <Icons name="trash" :size="14" />
-                        Nonaktifkan
-                      </button>
-                      <button
-                        type="button"
-                        class="action-btn table-action-btn delete-btn permanent-delete-btn"
-                        :disabled="row.id === auth.user?.id"
-                        @click="openConfirm('force-delete', row)"
-                      >
-                        <Icons name="trash" :size="14" />
-                        Hapus
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </DataTable>
-          </div>
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col" class="col-num">#</th>
+                <th scope="col">Nama</th>
+                <th scope="col">Email</th>
+                <th scope="col">Role</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in personil" :key="row.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <span class="ui-table-primary">{{ row.name }}</span>
+                  <span v-if="row.id === auth.user?.id" class="ui-table-subtitle">Akun Anda</span>
+                </td>
+                <td data-label="Email" class="personil-email">{{ row.email }}</td>
+                <td data-label="Role">
+                  <StatusBadge tone="neutral">{{ roleLabel(row.role) }}</StatusBadge>
+                </td>
+                <td data-label="Status">
+                  <StatusBadge :tone="row.deleted_at ? 'danger' : 'success'">
+                    {{ statusLabel(row) }}
+                  </StatusBadge>
+                </td>
+                <td class="ui-table-actions">
+                  <IconActionCell :label="`Aksi untuk ${row.name}`">
+                    <IconActionButton label="Edit personil" icon="edit" @click="openEditModal(row)" />
+                    <IconActionButton
+                      v-if="row.deleted_at"
+                      label="Aktifkan kembali"
+                      icon="refresh"
+                      tone="positive"
+                      @click="openConfirm('restore', row)"
+                    />
+                    <IconActionButton
+                      v-else
+                      label="Nonaktifkan personil"
+                      icon="user"
+                      tone="danger"
+                      :disabled="row.id === auth.user?.id"
+                      @click="openConfirm('deactivate', row)"
+                    />
+                    <IconActionButton
+                      label="Hapus permanen"
+                      icon="trash"
+                      tone="danger"
+                      :disabled="row.id === auth.user?.id"
+                      @click="openConfirm('force-delete', row)"
+                    />
+                  </IconActionCell>
+                </td>
+              </tr>
+            </tbody>
+          </DataTable>
+        </AsyncState>
 
-          <div v-if="pagination.lastPage > 1" class="pagination">
-            <div class="pagination-info">
-              Menampilkan {{ ((pagination.currentPage - 1) * pagination.perPage) + 1 }} -
-              {{ Math.min(pagination.currentPage * pagination.perPage, pagination.total) }}
-              dari {{ pagination.total }} data
-            </div>
-            <div class="pagination-controls">
-              <button
-                @click="loadPersonil(pagination.currentPage - 1)"
-                :disabled="pagination.currentPage === 1"
-                class="pagination-btn"
-              >
-                <Icons name="chevron-left" :size="16" />
-              </button>
-
-              <button
-                v-for="page in pageNumbers"
-                :key="page"
-                @click="page !== '...' && loadPersonil(page)"
-                :class="['pagination-btn', { active: page === pagination.currentPage, disabled: page === '...' }]"
-              >
-                {{ page }}
-              </button>
-
-              <button
-                @click="loadPersonil(pagination.currentPage + 1)"
-                :disabled="pagination.currentPage === pagination.lastPage"
-                class="pagination-btn"
-              >
-                <Icons name="chevron-right" :size="16" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <dialog v-if="showFormModal" class="modal active" open aria-labelledby="personil-modal-title" @click.self="closeFormModal">
-        <div class="modal-content personil-modal">
-          <div class="modal-header">
-            <h3 id="personil-modal-title">{{ editingPersonil ? 'Edit Personil' : 'Tambah Personil' }}</h3>
-            <button class="close-btn" type="button" aria-label="Tutup modal" @click="closeFormModal">&times;</button>
-          </div>
-          <form class="personil-form" @submit.prevent="submitForm">
-            <div class="form-grid">
-              <div class="form-group">
-                <label>Nama</label>
-                <input v-model.trim="form.name" type="text" maxlength="255" class="form-control" required />
-                <small v-if="fieldError('name')" class="field-error">{{ fieldError('name') }}</small>
-              </div>
-
-              <div class="form-group">
-                <label>Email</label>
-                <input v-model.trim="form.email" type="email" maxlength="255" class="form-control" required />
-                <small v-if="fieldError('email')" class="field-error">{{ fieldError('email') }}</small>
-              </div>
-
-              <div class="form-group form-group-wide">
-                <label>Role</label>
-                <select v-model="form.role" class="form-control" required>
-                  <option v-for="role in ROLE_OPTIONS" :key="role" :value="role">
-                    {{ roleLabel(role) }}
-                  </option>
-                </select>
-                <small v-if="fieldError('role')" class="field-error">{{ fieldError('role') }}</small>
-              </div>
-
-              <div class="form-group">
-                <label>Password</label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  maxlength="128"
-                  class="form-control"
-                  :required="!editingPersonil"
-                  autocomplete="new-password"
-                />
-                <small v-if="editingPersonil" class="field-help">Kosongkan jika tidak diganti.</small>
-                <small v-if="fieldError('password')" class="field-error">{{ fieldError('password') }}</small>
-              </div>
-
-              <div class="form-group">
-                <label>Konfirmasi Password</label>
-                <input
-                  v-model="form.password_confirmation"
-                  type="password"
-                  maxlength="128"
-                  class="form-control"
-                  :required="!editingPersonil || !!form.password"
-                  autocomplete="new-password"
-                />
-              </div>
-            </div>
-
-            <div class="modal-actions">
-              <button class="btn btn-secondary" type="button" :disabled="saving" @click="closeFormModal">
-                Batal
-              </button>
-              <button class="btn btn-primary" type="submit" :disabled="saving">
-                <Icons name="check" :size="14" />
-                {{ saving ? 'Menyimpan...' : 'Simpan' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </dialog>
-
-      <dialog v-if="confirmDialog.show" class="modal active" open aria-labelledby="personil-confirm-title" @click.self="closeConfirm">
-        <div class="modal-content confirm-modal">
-          <div class="confirm-header">
-            <Icons :name="confirmDialog.type === 'restore' ? 'refresh' : 'alert'" :size="48" class="confirm-icon" />
-            <h3 id="personil-confirm-title">{{ confirmTitle() }}</h3>
-          </div>
-          <div class="confirm-body">
-            <p>{{ confirmMessage() }}</p>
-            <p class="confirm-target"><strong>{{ confirmDialog.target?.name }}</strong></p>
-          </div>
-          <div class="confirm-actions">
-            <button class="btn btn-secondary" :disabled="confirmDialog.loading" @click="closeConfirm">
-              Batal
-            </button>
-            <button
-              class="btn"
-              :class="confirmDialog.type === 'restore' ? 'btn-primary' : 'btn-danger'"
-              :disabled="confirmDialog.loading"
-              @click="submitConfirm"
-            >
-              <Icons :name="confirmButtonIcon()" :size="14" />
-              {{ confirmButtonLabel() }}
-            </button>
-          </div>
-        </div>
-      </dialog>
+        <PaginationBar
+          :page="pagination.currentPage"
+          :last-page="pagination.lastPage"
+          :total="pagination.total"
+          item-label="personil"
+          @change="loadPersonil"
+        />
+      </section>
     </div>
-  </AdminSistemLayout>
+
+      <Modal
+        :model-value="showFormModal"
+        :title="editingPersonil ? 'Edit Personil' : 'Tambah Personil'"
+        description="Lengkapi identitas dan hak akses personil."
+        size="lg"
+        variant="centered"
+        :persistent="saving"
+        @update:model-value="handleFormModalChange"
+      >
+        <form class="personil-form idds-personil-form" @submit.prevent="submitForm">
+          <div class="form-grid">
+            <TextField
+              v-model="form.name"
+              label="Nama lengkap"
+              placeholder="Masukkan nama lengkap"
+              :max-length="255"
+              required
+              :status="fieldError('name') ? 'error' : 'neutral'"
+              :status-message="fieldError('name')"
+              autocomplete="name"
+            />
+            <TextField
+              v-model="form.email"
+              label="Email"
+              placeholder="nama@instansi.go.id"
+              type="email"
+              :max-length="255"
+              required
+              :status="fieldError('email') ? 'error' : 'neutral'"
+              :status-message="fieldError('email')"
+              autocomplete="email"
+            />
+            <div class="form-group-wide">
+              <IddsSelect
+                v-model="form.role"
+                :options="roleOptions"
+                label="Role"
+                placeholder="Pilih role"
+                required
+                width="100%"
+                :status="fieldError('role') ? 'error' : 'neutral'"
+                :status-message="fieldError('role')"
+              />
+            </div>
+            <PasswordInput
+              v-model="form.password"
+              label="Password"
+              placeholder="Masukkan password"
+              :max-length="128"
+              :required="!editingPersonil"
+              :helper-text="editingPersonil ? 'Kosongkan jika password tidak diubah.' : 'Minimal 8 karakter dengan huruf besar, angka, dan simbol.'"
+              :status="fieldError('password') ? 'error' : 'neutral'"
+              :status-message="fieldError('password')"
+            />
+            <PasswordInput
+              v-model="form.password_confirmation"
+              label="Konfirmasi password"
+              placeholder="Ulangi password"
+              :max-length="128"
+              :required="!editingPersonil || !!form.password"
+            />
+          </div>
+          <div class="modal-actions">
+            <Button hierarchy="secondary" size="lg" type="button" :disabled="saving" @click="closeFormModal">
+              Batal
+            </Button>
+            <Button hierarchy="primary" size="lg" type="submit" :prefix-icon="IconCheck" :disabled="saving">
+              {{ saving ? 'Menyimpan...' : 'Simpan personil' }}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmationDrawer
+        :model-value="confirmDialog.show"
+        :title="confirmTitle()"
+        :description="confirmMessage()"
+        :subject="confirmDialog.target?.name || 'Personil'"
+        :confirm-label="confirmButtonLabel()"
+        :tone="confirmDialog.type === 'restore' ? 'positive' : 'danger'"
+        :illustration="confirmDialog.type === 'restore' ? '/illustrations/empty-data.png' : '/illustrations/confirm-delete.png'"
+        :loading="confirmDialog.loading"
+        @update:model-value="handleConfirmModalChange"
+        @confirm="submitConfirm"
+        @cancel="closeConfirm"
+      />
+  </div>
 </template>
 
 <style scoped>
@@ -624,7 +596,7 @@ function fieldError(name) {
   position: relative;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -676,16 +648,17 @@ function fieldError(name) {
 .stat-icon-wrap.bg-red { background: #fef2f2; color: #ef4444; }
 
 .stat-label {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h4-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
-  line-height: 1.2;
+  line-height: var(--idds-heading-h4-line);
 }
 
 .workspace-hero-card {
@@ -694,8 +667,8 @@ function fieldError(name) {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 20px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -706,7 +679,8 @@ function fieldError(name) {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link {
@@ -715,40 +689,31 @@ function fieldError(name) {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link:hover { color: rgba(255, 255, 255, 0.9); }
 .ah-bc-sep { color: rgba(255, 255, 255, 0.35); }
-.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: var(--idds-weight-medium); }
 
 .workspace-hero-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .workspace-hero-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.7);
-  line-height: 1.5;
-}
-
-.filter-select {
-  min-width: 150px;
-  height: 40px;
-  border: 1px solid #d8dee9;
-  border-radius: 8px;
-  background: #fff;
-  color: var(--notion-text);
-  font-size: 14px;
-  padding: 0 12px;
+  line-height: var(--idds-caption-line);
 }
 
 .personil-name-cell {
@@ -758,18 +723,20 @@ function fieldError(name) {
 }
 
 .personil-name-main {
-  font-weight: 600;
-  color: var(--notion-text);
-  font-size: 14px;
+  font-weight: var(--idds-weight-semibold);
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .personil-name-sub {
-  font-size: 12px;
-  color: var(--notion-blue);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-primary-primary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .personil-email {
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
   white-space: nowrap;
 }
 
@@ -795,14 +762,16 @@ function fieldError(name) {
   display: block;
   margin-top: 6px;
   color: #dc2626;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .field-help {
   display: block;
   margin-top: 6px;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .modal-actions {
@@ -811,7 +780,7 @@ function fieldError(name) {
   gap: 10px;
   padding-top: 18px;
   margin-top: 18px;
-  border-top: 1px solid var(--notion-border);
+  border-top: 1px solid var(--ina-stroke-primary);
 }
 
 .action-btn:disabled {
@@ -829,10 +798,6 @@ function fieldError(name) {
     flex-direction: column;
     align-items: flex-start;
     margin: 0 12px 16px;
-  }
-
-  .filter-select {
-    width: 100%;
   }
 
   .form-grid {

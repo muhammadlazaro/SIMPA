@@ -16,6 +16,12 @@ class AplikasiDocumentTest extends TestCase
     private const AUTH_HEADER_PREFIX = 'Bearer ';
     private const PDF_MIME_TYPE = 'application/pdf';
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
+
     public function test_pengelola_can_list_and_upload_document(): void
     {
         Storage::fake('public');
@@ -35,12 +41,61 @@ class AplikasiDocumentTest extends TestCase
                 'file' => UploadedFile::fake()->create('laporan.pdf', 200, self::PDF_MIME_TYPE),
             ]);
         $upload->assertStatus(201)
-            ->assertJsonPath('data.document.document_type', 'laporan_analisa_desain');
+            ->assertJsonPath('data.document.document_type', 'laporan_analisa_desain')
+            ->assertJsonMissingPath('data.document.file_url')
+            ->assertJsonPath('data.document.preview_supported', true);
+
+        $documentId = $upload->json('data.document.id');
+        $this->assertDatabaseHas('aplikasi_documents', [
+            'id' => $documentId,
+            'storage_disk' => 'local',
+        ]);
 
         $list2 = $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->getJson("/api/aplikasi/{$app->id}/documents");
         $list2->assertStatus(200);
         $this->assertCount(1, $list2->json('data.documents'));
+
+        $preview = $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
+            ->get("/api/aplikasi/{$app->id}/documents/{$documentId}/preview");
+        $preview->assertOk()
+            ->assertHeader('content-type', self::PDF_MIME_TYPE);
+        $this->assertStringContainsString('private', (string) $preview->headers->get('cache-control'));
+        $this->assertStringContainsString('no-store', (string) $preview->headers->get('cache-control'));
+    }
+
+    public function test_document_preview_requires_authorized_application_access(): void
+    {
+        $owner = User::factory()->create(['role' => 'unit_kerja']);
+        $outsider = User::factory()->create(['role' => 'unit_kerja']);
+        $app = Aplikasi::factory()->create([
+            'created_by' => $owner->id,
+            'status' => Aplikasi::STATUS_DIAJUKAN,
+        ]);
+        $otherApp = Aplikasi::factory()->create(['created_by' => $owner->id]);
+
+        Storage::disk('local')->put('aplikasi_documents/formulir.pdf', '%PDF-1.4 test');
+        $document = $app->documents()->create([
+            'document_type' => 'formulir_pengajuan',
+            'storage_path' => 'aplikasi_documents/formulir.pdf',
+            'storage_disk' => 'local',
+            'original_filename' => 'formulir.pdf',
+            'mime_type' => self::PDF_MIME_TYPE,
+            'file_size' => 13,
+            'version' => 1,
+            'status' => 'active',
+            'uploaded_by' => $owner->id,
+        ]);
+
+        $outsiderToken = $outsider->createToken('outsider')->plainTextToken;
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$outsiderToken)
+            ->get("/api/aplikasi/{$app->id}/documents/{$document->id}/preview")
+            ->assertForbidden();
+
+        $ownerToken = $owner->createToken('owner')->plainTextToken;
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$ownerToken)
+            ->get("/api/aplikasi/{$otherApp->id}/documents/{$document->id}/preview")
+            ->assertNotFound();
     }
 
     public function test_unit_kerja_can_upload_allowed_type_on_own_app(): void

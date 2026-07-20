@@ -17,9 +17,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 class AplikasiDocumentController extends Controller
 {
+    private const PRIVATE_DISK = 'local';
+
     public function index(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
@@ -31,30 +35,7 @@ class AplikasiDocumentController extends Controller
             ->with('uploader:id,name')
             ->orderByDesc('id')
             ->get()
-            ->pipe(function ($collection) {
-                /** @var FilesystemAdapter $publicDisk */
-                $publicDisk = Storage::disk('public');
-
-                return $collection->map(function (AplikasiDocument $doc) use ($publicDisk) {
-                    $documentType = $doc->getAttribute('document_type');
-
-                    return [
-                        'id' => $doc->getKey(),
-                        'document_type' => $documentType instanceof AplikasiJenisDokumen
-                            ? $documentType->value
-                            : $documentType,
-                        'original_filename' => $doc->getAttribute('original_filename'),
-                        'mime_type' => $doc->getAttribute('mime_type'),
-                        'file_size' => $doc->getAttribute('file_size'),
-                        'file_url' => $publicDisk->url((string) $doc->getAttribute('storage_path')),
-                        'version' => $doc->getAttribute('version'),
-                        'status' => $doc->getAttribute('status'),
-                        'notes' => $doc->getAttribute('notes'),
-                        'uploaded_by' => $doc->getRelationValue('uploader'),
-                        'created_at' => $doc->getAttribute('created_at'),
-                    ];
-                });
-            });
+            ->map(fn (AplikasiDocument $doc) => $this->documentPayload($aplikasi, $doc));
 
         return ApiResponse::success(['documents' => $documents]);
     }
@@ -82,7 +63,7 @@ class AplikasiDocumentController extends Controller
         }
 
         $file = $request->file('file');
-        $path = $file->store('aplikasi_documents', 'public');
+        $path = $file->store('aplikasi_documents', self::PRIVATE_DISK);
 
         try {
             $doc = DB::transaction(function () use ($aplikasiId, $jenis, $path, $file, $user, $request) {
@@ -103,6 +84,7 @@ class AplikasiDocumentController extends Controller
                     'aplikasi_id' => $aplikasiId,
                     'document_type' => $jenis,
                     'storage_path' => $path,
+                    'storage_disk' => self::PRIVATE_DISK,
                     'original_filename' => $file->getClientOriginalName(),
                     'mime_type' => $file->getClientMimeType(),
                     'file_size' => $file->getSize(),
@@ -114,7 +96,7 @@ class AplikasiDocumentController extends Controller
             });
         } catch (\Throwable $e) {
             // Hapus file yang sudah diupload jika transaksi gagal
-            Storage::disk('public')->delete($path);
+            Storage::disk(self::PRIVATE_DISK)->delete($path);
 
             Log::error('Failed to store document', [
                 'aplikasi_id' => $aplikasiId,
@@ -129,21 +111,77 @@ class AplikasiDocumentController extends Controller
             $this->notifyPengelolaForUatDocument($aplikasi, $user);
         }
 
-        /** @var FilesystemAdapter $publicDisk */
-        $publicDisk = Storage::disk('public');
-
         return ApiResponse::created([
-            'document' => [
-                'id' => $doc->getKey(),
-                'document_type' => $jenis->value,
-                'original_filename' => $doc->getAttribute('original_filename'),
-                'file_url' => $publicDisk->url((string) $doc->getAttribute('storage_path')),
-                'version' => $doc->getAttribute('version'),
-                'status' => $doc->getAttribute('status'),
-                'uploaded_by' => $doc->getRelationValue('uploader'),
-                'created_at' => $doc->getAttribute('created_at'),
-            ],
+            'document' => $this->documentPayload($aplikasi, $doc),
         ], 'Dokumen berhasil diunggah');
+    }
+
+    public function preview(Request $request, Aplikasi $aplikasi, AplikasiDocument $document): BinaryFileResponse|JsonResponse
+    {
+        if ((int) $document->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            return ApiResponse::notFound('Dokumen tidak ditemukan.');
+        }
+
+        if (! AplikasiDocumentAccess::canView($request->user(), $aplikasi)) {
+            return ApiResponse::forbidden('Akses ditolak.');
+        }
+
+        $diskName = $this->resolveDisk($document);
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk($diskName);
+        $path = (string) $document->getAttribute('storage_path');
+
+        if ($path === '' || ! $disk->exists($path)) {
+            return ApiResponse::notFound('File dokumen tidak ditemukan.');
+        }
+
+        $fileName = trim((string) $document->getAttribute('original_filename')) ?: 'dokumen';
+        $fallbackName = preg_replace('/[^A-Za-z0-9._-]/', '_', $fileName) ?: 'dokumen';
+        $disposition = (new ResponseHeaderBag())->makeDisposition(
+            ResponseHeaderBag::DISPOSITION_INLINE,
+            $fileName,
+            $fallbackName
+        );
+
+        return response()->file($disk->path($path), [
+            'Content-Type' => (string) ($document->getAttribute('mime_type') ?: 'application/octet-stream'),
+            'Content-Disposition' => $disposition,
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    private function documentPayload(Aplikasi $aplikasi, AplikasiDocument $document): array
+    {
+        $documentType = $document->getAttribute('document_type');
+        $mimeType = (string) $document->getAttribute('mime_type');
+
+        return [
+            'id' => $document->getKey(),
+            'document_type' => $documentType instanceof AplikasiJenisDokumen
+                ? $documentType->value
+                : $documentType,
+            'original_filename' => $document->getAttribute('original_filename'),
+            'mime_type' => $mimeType,
+            'file_size' => $document->getAttribute('file_size'),
+            'preview_url' => route('aplikasi.documents.preview', [
+                'aplikasi' => $aplikasi,
+                'document' => $document,
+            ], false),
+            'preview_supported' => $mimeType === 'application/pdf',
+            'version' => $document->getAttribute('version'),
+            'status' => $document->getAttribute('status'),
+            'notes' => $document->getAttribute('notes'),
+            'uploaded_by' => $document->getRelationValue('uploader'),
+            'created_at' => $document->getAttribute('created_at'),
+        ];
+    }
+
+    private function resolveDisk(AplikasiDocument $document): string
+    {
+        $disk = (string) ($document->getAttribute('storage_disk') ?: 'public');
+
+        return in_array($disk, ['local', 'public'], true) ? $disk : 'public';
     }
 
     private function notifyPengelolaForUatDocument(Aplikasi $aplikasi, ?User $uploader): void

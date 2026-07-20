@@ -1,21 +1,7 @@
-<template>
-  <div v-if="hasError" class="error-boundary">
-    <div class="error-container">
-      <h2>Terjadi Kesalahan</h2>
-      <p>Maaf, terjadi kesalahan yang tidak terduga.</p>
-      <div v-if="isDevelopment" class="error-details">
-        <h3>Detail Error:</h3>
-        <pre>{{ errorMessage }}</pre>
-        <pre>{{ errorStack }}</pre>
-      </div>
-      <button @click="reload" class="btn btn-primary">Muat Ulang Halaman</button>
-    </div>
-  </div>
-  <slot v-else></slot>
-</template>
-
 <script setup>
-import { ref, onErrorCaptured } from 'vue'
+import { Button } from '@idds/vue'
+import { IconArrowLeft, IconRefresh } from '@tabler/icons-vue'
+import { onErrorCaptured, ref } from 'vue'
 import { warnDev } from '../utils/logger'
 
 const hasError = ref(false)
@@ -28,69 +14,129 @@ onErrorCaptured((err, instance, info) => {
   errorMessage.value = err.message || 'Unknown error'
   errorStack.value = err.stack || ''
   warnDev('[ErrorBoundary] Error captured:', { err, instance, info })
-  
-  // Prevent error from propagating further
   return false
 })
 
-const reload = () => {
+function reload() {
   window.location.reload()
+}
+
+function goBack() {
+  if (window.history.length > 1) {
+    window.history.back()
+    return
+  }
+
+  window.location.assign('/')
 }
 </script>
 
+<template>
+  <main v-if="hasError" class="system-state-page">
+    <section class="system-state-content" aria-labelledby="error-title">
+      <span class="system-state-code">Gangguan aplikasi</span>
+      <h1 id="error-title">Halaman belum dapat ditampilkan</h1>
+      <p>
+        Data Anda tetap aman. Muat ulang halaman untuk mencoba kembali atau kembali ke halaman sebelumnya.
+      </p>
+
+      <div class="system-state-actions">
+        <Button hierarchy="primary" size="lg" :prefix-icon="IconRefresh" @click="reload">
+          Muat ulang
+        </Button>
+        <Button hierarchy="secondary" size="lg" :prefix-icon="IconArrowLeft" @click="goBack">
+          Kembali
+        </Button>
+      </div>
+
+      <details v-if="isDevelopment" class="error-details">
+        <summary>Detail teknis untuk pengembang</summary>
+        <pre>{{ errorMessage }}</pre>
+        <pre>{{ errorStack }}</pre>
+      </details>
+    </section>
+  </main>
+  <slot v-else />
+</template>
+
 <style scoped>
-.error-boundary {
+.system-state-page {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--notion-bg-secondary);
-  padding: 20px;
+  display: grid;
+  place-items: center;
+  padding: var(--ina-spacing-6);
+  background: var(--ina-background-secondary);
 }
 
-.error-container {
-  background: var(--notion-bg);
-  border-radius: 12px;
-  padding: 40px;
-  max-width: 600px;
+.system-state-content {
+  width: min(100%, 600px);
   text-align: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--notion-border);
 }
 
-.error-container h2 {
-  color: var(--notion-red);
-  margin-bottom: 16px;
+.system-state-code {
+  display: block;
+  margin-bottom: var(--ina-spacing-3);
+  color: var(--ina-negative-600);
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
-.error-container p {
-  color: var(--notion-text-secondary);
-  margin-bottom: 24px;
+h1 {
+  margin: 0;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-heading-h2-size);
+  line-height: var(--idds-heading-h2-line);
+}
+
+p {
+  max-width: 54ch;
+  margin: var(--ina-spacing-4) auto 0;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-body-size);
+  line-height: var(--idds-body-line);
+}
+
+.system-state-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--ina-spacing-3);
+  margin-top: var(--ina-spacing-6);
 }
 
 .error-details {
+  margin-top: var(--ina-spacing-6);
+  padding: var(--ina-spacing-4);
+  border: 1px solid var(--ina-stroke-primary);
+  border-radius: var(--ina-radius-lg);
+  background: var(--ina-background-primary);
   text-align: left;
-  background: var(--notion-bg-secondary);
-  border-radius: 6px;
-  padding: 16px;
-  margin: 24px 0;
-  max-height: 300px;
-  overflow-y: auto;
-  border: 1px solid var(--notion-border);
 }
 
-.error-details h3 {
-  font-size: 14px;
-  margin-bottom: 8px;
-  color: var(--notion-text);
+.error-details summary {
+  color: var(--ina-content-primary);
+  cursor: pointer;
+  font-weight: var(--idds-weight-medium);
 }
 
 .error-details pre {
-  font-size: 12px;
-  color: var(--notion-red);
+  max-height: 180px;
+  overflow: auto;
+  color: var(--ina-negative-700);
+  font-size: var(--idds-caption-small-size);
   white-space: pre-wrap;
-  word-wrap: break-word;
-  margin: 0;
+  line-height: var(--idds-caption-small-line);
+}
+
+@media (max-width: 520px) {
+  h1 {
+    font-size: var(--idds-heading-h4-size);
+    line-height: var(--idds-heading-h4-line);
+  }
+
+  .system-state-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>
-

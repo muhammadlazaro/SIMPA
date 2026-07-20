@@ -109,6 +109,34 @@ class Aplikasi extends Model
             }
         });
 
+        static::created(function ($model) {
+            if ($model->getAttribute('status') !== self::STATUS_DIAJUKAN) {
+                return;
+            }
+
+            $creator = User::query()->find($model->getAttribute('created_by'));
+            if (! $creator?->isUnitKerja()) {
+                return;
+            }
+
+            $appName = (string) $model->getAttribute('nama_aplikasi');
+            User::query()
+                ->where('role', 'pengelola_aplikasi')
+                ->get(['id'])
+                ->each(function (User $pengelola) use ($model, $appName): void {
+                    AppNotification::create([
+                        'user_id' => $pengelola->getKey(),
+                        'aplikasi_id' => $model->getKey(),
+                        'type' => 'action_required',
+                        'title' => 'Pengajuan Baru Masuk',
+                        'body' => sprintf(
+                            'Aplikasi "%s" baru diajukan dan menunggu verifikasi Anda.',
+                            $appName
+                        ),
+                    ]);
+                });
+        });
+
         /**
          * Kirim notifikasi in-app ke semua pihak yang berkepentingan saat status workflow berubah.
          *

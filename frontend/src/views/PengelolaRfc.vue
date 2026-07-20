@@ -1,13 +1,32 @@
 <script setup>
+import {
+  Button,
+  Modal,
+  SingleFileUpload,
+  Stepper,
+} from '@idds/vue'
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconPlus,
+} from '@tabler/icons-vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import http from '../lib/http'
-import PengelolaLayout from '../layouts/PengelolaLayout.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import ConfirmationDrawer from '../components/ConfirmationDrawer.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import AsyncState from '../components/AsyncState.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
+import IddsSelect from '../components/IddsSelect.vue'
+import MetricCard from '../components/MetricCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { useToastStore } from '../stores/toast'
-import { usePagination } from '../composables/usePagination.js'
+import { resolveIddsFileSelection } from '../utils/fileUpload'
 import { warnDev } from '../utils/logger'
 import { getRfcStatusBadgeClass } from '../constants/status'
 
@@ -17,10 +36,10 @@ const toast = useToastStore()
 
 const rfcs = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const search = ref('')
 const hasActiveSearch = computed(() => !!search.value?.trim())
-const pagination = ref({ currentPage: 1, lastPage: 1, perPage: 10, total: 0 })
-const { pageNumbers: rfcPageNumbers } = usePagination(pagination)
+const pagination = ref({ currentPage: 1, lastPage: 1, perPage: 30, total: 0 })
 
 const appsActive = ref([])
 const showForm = ref(false)
@@ -28,78 +47,51 @@ const savingRfc = ref(false)
 const editing = ref(null)
 const rfcStep = ref(1)
 const selectedApp = ref('')
-const appSearchQuery = ref('')
-const showAppDropdown = ref(false)
 const rfcFile = ref(null)
-const rfcFileInput = ref(null)
-
-const filteredApps = computed(() => {
-  const q = appSearchQuery.value.toLowerCase().trim()
-  
-  // Jika string pencarian persis sama dengan nama aplikasi yang sedang dipilih
-  // (artinya user baru klik form dan belum mengetik apa-apa), tampilkan semua opsi
-  if (selectedApp.value) {
-    const found = appsActive.value.find(a => a.id === selectedApp.value)
-    if (found && found.name.toLowerCase() === q) {
-      return appsActive.value
-    }
-  }
-
-  if (!q) return appsActive.value
-  return appsActive.value.filter((a) => a.name.toLowerCase().includes(q))
-})
-
-function selectApp(app) {
-  selectedApp.value = app.id
-  appSearchQuery.value = app.name
-  showAppDropdown.value = false
-}
-
-function onAppInputFocus(e) {
-  showAppDropdown.value = true
-  // Pilih (highlight) semua teks saat fokus agar mudah ditimpa jika ngetik
-  e.target.select()
-}
-
-function onAppInputBlur() {
-  // Delay agar klik pada item dropdown masih ter-handle
-  setTimeout(() => {
-    showAppDropdown.value = false
-    
-    if (appSearchQuery.value.trim() === '') {
-      // Jika user menghapus teks sampai kosong dan klik di luar, maka hapus pilihan
-      selectedApp.value = ''
-    } else {
-      // Restore display name jika input tidak kosong tapi tidak di-klik dari dropdown
-      const found = appsActive.value.find((a) => a.id === selectedApp.value)
-      appSearchQuery.value = found ? found.name : ''
-    }
-  }, 200)
-}
-
-function getSelectedAppName() {
-  const found = appsActive.value.find((a) => a.id === selectedApp.value)
-  return found ? found.name : ''
-}
 const selectedTipe = ref('')
 const selectedPelaksana = ref('')
 const selectedStatus = ref('')
 const showDeleteModal = ref(false)
 const deleteTarget = ref(null)
 const deletingRfc = ref(false)
-const stats = ref({ development: 0, operational: 0, inactive: 0 })
+const stats = ref({ total: 0, diajukan: 0, diproses: 0, production: 0 })
+const applicationOptions = computed(() => appsActive.value.map((app) => ({
+  label: app.name,
+  value: app.id,
+})))
+const rfcTypeOptions = [
+  { label: 'Medium', value: 'Medium' },
+  { label: 'Standar', value: 'Standar' },
+  { label: 'Minor', value: 'Minor' },
+  { label: 'Major', value: 'Major' },
+  { label: 'Darurat', value: 'Darurat' },
+]
+const executorOptions = [
+  { label: 'Internal Pusdatik', value: 'Internal Pusdatik' },
+  { label: 'Eksternal', value: 'Eksternal' },
+  { label: 'Internal D13', value: 'Internal D13' },
+]
+const statusOptions = [
+  { label: 'Diajukan', value: 'Diajukan' },
+  { label: 'Analisis Desain', value: 'Analisa Desain' },
+  { label: 'Dev-Staging', value: 'Dev-Staging' },
+  { label: 'UAT', value: 'UAT' },
+  { label: 'Production', value: 'Production' },
+]
+const rfcSteps = [
+  { label: 'Data RFC' },
+  { label: 'Formulir RFC' },
+]
 
 let searchTimer = null
 
 function resetForm() {
   rfcStep.value = 1
   selectedApp.value = ''
-  appSearchQuery.value = ''
   selectedTipe.value = ''
   selectedPelaksana.value = ''
   selectedStatus.value = ''
   rfcFile.value = null
-  if (rfcFileInput.value) rfcFileInput.value.value = ''
 }
 
 async function openAdd() {
@@ -149,7 +141,7 @@ async function deleteRfc() {
     toast.push('RFC berhasil dihapus', 'success')
     showDeleteModal.value = false
     deleteTarget.value = null
-    await loadRfcs(pagination.value.currentPage)
+    await Promise.all([loadRfcs(pagination.value.currentPage), loadRfcStats()])
   } catch (error) {
     const message = error.response?.data?.message || error.message || 'Gagal menghapus RFC'
     toast.push(message, 'error')
@@ -159,13 +151,17 @@ async function deleteRfc() {
   }
 }
 
-function onRfcFileChange(event) {
-  rfcFile.value = event.target.files?.[0] || null
+function onRfcFileChange(file, validation) {
+  const selection = resolveIddsFileSelection(file, validation, 'File tidak sesuai ketentuan.')
+  rfcFile.value = selection.file
+
+  if (selection.error) {
+    toast.push(selection.error, 'error')
+  }
 }
 
 function removeRfcFile() {
   rfcFile.value = null
-  if (rfcFileInput.value) rfcFileInput.value.value = ''
 }
 
 function validateRfcData() {
@@ -198,23 +194,25 @@ function clearSearch() {
   loadRfcs(1)
 }
 
-async function loadGlobalStats() {
+async function loadRfcStats() {
   try {
-    const resp = await http.get('/aplikasi/stats')
+    const resp = await http.get('/rfc/stats')
     const data = resp.data?.data || {}
     stats.value = {
-      development: data.development || 0,
-      operational: data.operational || 0,
-      inactive: data.inactive || 0,
+      total: Number(data.total) || 0,
+      diajukan: Number(data.diajukan) || 0,
+      diproses: Number(data.diproses) || 0,
+      production: Number(data.production) || 0,
     }
   } catch (error) {
-    warnDev('[PengelolaRfc] loadGlobalStats error:', error)
-    stats.value = { development: 0, operational: 0, inactive: 0 }
+    warnDev('[PengelolaRfc] loadRfcStats error:', error)
+    stats.value = { total: 0, diajukan: 0, diproses: 0, production: 0 }
   }
 }
 
 async function loadRfcs(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const q = search.value?.trim() ? `q=${encodeURIComponent(search.value.trim())}&` : ''
     const resp = await http.get(`/rfc?${q}per_page=${pagination.value.perPage}&page=${page}`)
@@ -224,7 +222,7 @@ async function loadRfcs(page = 1) {
       pagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || pagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || pagination.value.perPage || 30,
         total: Number(meta.total) || 0,
       }
     } else {
@@ -232,6 +230,7 @@ async function loadRfcs(page = 1) {
     }
   } catch (error) {
     warnDev('[PengelolaRfc] loadRfcs error:', error)
+    loadError.value = 'Daftar RFC belum dapat dimuat. Periksa koneksi lalu coba lagi.'
     toast.push('Gagal memuat data RFC', 'error')
   } finally {
     loading.value = false
@@ -252,7 +251,7 @@ async function loadActiveApps() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadRfcs(), loadActiveApps(), loadGlobalStats()])
+  await Promise.all([loadRfcs(), loadActiveApps(), loadRfcStats()])
 })
 
 onBeforeUnmount(() => {
@@ -271,9 +270,7 @@ watch(editing, (val) => {
   if (val) {
     rfcStep.value = 1
     rfcFile.value = null
-    if (rfcFileInput.value) rfcFileInput.value.value = ''
     selectedApp.value = val.aplikasi_id
-    appSearchQuery.value = val.aplikasi?.nama_aplikasi || getSelectedAppName()
     selectedTipe.value = val.tipe_rfc
     selectedPelaksana.value = val.pelaksana || 'Internal Pusdatik'
     selectedStatus.value = val.status_tindaklanjut || 'Analisa Desain'
@@ -311,7 +308,7 @@ async function submitRfc() {
     }
     showForm.value = false
     editing.value = null
-    await loadRfcs(pagination.value.currentPage)
+    await Promise.all([loadRfcs(pagination.value.currentPage), loadRfcStats()])
   } catch (error) {
     const message = error.response?.data?.message || error.message || 'Gagal menyimpan RFC'
     toast.push(message, 'error')
@@ -320,368 +317,221 @@ async function submitRfc() {
     savingRfc.value = false
   }
 }
+
+function rfcStatusTone(status) {
+  const badgeClass = getRfcStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
+}
+
+function handleFormModalChange(open) {
+  if (!open) closeForm()
+}
+
 </script>
 
 <template>
-  <PengelolaLayout>
-    <div class="container workspace-dashboard">
-      <div class="workspace-hero-card">
-        <div class="workspace-hero-text">
-          <nav class="workspace-hero-breadcrumb" aria-label="breadcrumb">
-            <button @click="router.push('/pengelola-aplikasi')" class="ah-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="ah-bc-sep">/</span>
-            <span class="ah-bc-current">Kelola RFC</span>
-          </nav>
-          <h2 class="workspace-hero-title">Kelola RFC</h2>
-          <p class="workspace-hero-sub">Pantau, kelola, dan proses seluruh RFC dari aplikasi.</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Pengelola Aplikasi"
+      title="Kelola RFC"
+      description="Pantau dan tindak lanjuti seluruh perubahan aplikasi dalam satu antrian."
+    >
+      <template #actions>
+        <Button hierarchy="primary" size="lg" :prefix-icon="IconPlus" @click="openAdd">
+          Tambah RFC
+        </Button>
+      </template>
+    </PageHeader>
 
-      <div class="content-section active">
-        <!-- Stats modern style -->
-        <div class="stats-grid">
-          <div class="stat-card dev">
-            <div class="stat-header">
-              <span class="stat-label">Development</span>
-              <div class="stat-icon-wrap bg-amber">
-                <Icons name="code" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.development }}</div>
-          </div>
-          <div class="stat-card production">
-            <div class="stat-header">
-              <span class="stat-label">Operasional</span>
-              <div class="stat-icon-wrap bg-green">
-                <Icons name="check-circle" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.operational }}</div>
-          </div>
-          <div class="stat-card maintenance">
-            <div class="stat-header">
-              <span class="stat-label">Nonaktif</span>
-              <div class="stat-icon-wrap bg-red">
-                <Icons name="alert-circle" :size="18" />
-              </div>
-            </div>
-            <div class="stat-value">{{ stats.inactive }}</div>
-          </div>
-        </div>
+    <div class="ui-page-content">
+      <section class="ui-metric-grid" aria-label="Ringkasan RFC">
+        <MetricCard label="Total RFC" :value="stats.total" icon="file-text" tone="blue" />
+        <MetricCard label="Diajukan" :value="stats.diajukan" icon="file" tone="amber" />
+        <MetricCard label="Diproses" :value="stats.diproses" icon="code" tone="violet" />
+        <MetricCard label="Production" :value="stats.production" icon="check-circle" tone="green" />
+      </section>
 
-        <div class="card">
-          <DataCardHead title="Daftar RFC">
-            <template #actions>
-              <div class="search-group">
-                <span class="search-icon">
-                  <Icons name="search" :size="16" />
-                </span>
-                <input 
-                  type="text" 
-                  v-model="search" 
-                  @input="scheduleSearch"
-                  placeholder="Cari RFC..."
-                  maxlength="50" 
-                  aria-label="Cari RFC..."
-                />
-              </div>
-              <button class="btn btn-primary" @click="openAdd">
-                <Icons name="plus" :size="16" />
-                Tambah RFC
-              </button>
-            </template>
-          </DataCardHead>
+      <section class="ui-panel" aria-labelledby="rfc-list-title">
+        <header class="ui-panel-header">
+          <div>
+            <h2 id="rfc-list-title">Daftar RFC</h2>
+            <p class="ui-table-subtitle">{{ pagination.total }} perubahan tercatat</p>
+          </div>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="search"
+              label="Cari RFC"
+              placeholder="Cari RFC"
+              @update:model-value="scheduleSearch"
+            />
+          </div>
+        </header>
 
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p>Memuat data RFC...</p>
-        </div>
-        <div v-else-if="rfcs.length === 0 && hasActiveSearch" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="search" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Tidak Ada Hasil</h3>
-          <p class="global-empty-text">
-            Tidak ada RFC yang cocok dengan kata kunci pencarian ini.
-          </p>
-          <button type="button" class="btn btn-secondary" @click="clearSearch">
-            Hapus pencarian
-          </button>
-        </div>
-        <div v-else-if="rfcs.length === 0" class="global-empty">
-          <div class="global-empty-icon-wrapper">
-            <Icons name="file-text" :size="48" class="global-empty-icon" />
-          </div>
-          <h3 class="global-empty-title">Belum Ada RFC</h3>
-          <p class="global-empty-text">
-            Belum ada data Request for Change (RFC) yang tercatat dalam sistem ini.
-          </p>
-          <button @click="openAdd" class="btn btn-primary">
-            <Icons name="plus" :size="16" />
-            Tambah RFC
-          </button>
-        </div>
-        <div v-else>
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="rfcs.length === 0"
+          :empty-icon="hasActiveSearch ? 'search' : 'file-text'"
+          :empty-title="hasActiveSearch ? 'RFC tidak ditemukan' : 'Belum ada RFC'"
+          :empty-description="hasActiveSearch
+            ? 'Coba kata kunci lain atau hapus pencarian.'
+            : 'Belum ada Request for Change yang tercatat dalam sistem.'"
+          @retry="loadRfcs(pagination.currentPage)"
+        >
+          <template v-if="hasActiveSearch" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearSearch">
+              Hapus pencarian
+            </Button>
+          </template>
+
           <DataTable>
             <thead>
               <tr>
                 <th scope="col" class="col-num">#</th>
-                <th scope="col">Nama Aplikasi</th>
+                <th scope="col">Nama aplikasi</th>
                 <th scope="col">Tipe RFC</th>
                 <th scope="col">Pelaksana</th>
                 <th scope="col">Status</th>
-                <th scope="col" class="col-aksi">Aksi</th>
+                <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in rfcs" :key="item.id" class="data-table-row is-clickable" @click="openDetail(item)">
-                <td class="col-num">{{ rowNumber(idx) }}</td>
-                <td>{{ item.aplikasi?.nama_aplikasi || '-' }}</td>
-                <td>{{ item.tipe_rfc }}</td>
-                <td>{{ item.pelaksana || '-' }}</td>
-                <td>
-                  <span :class="['badge', getRfcStatusBadgeClass(item.status_tindaklanjut)]">
-                    {{ item.status_tindaklanjut }}
-                  </span>
+              <tr v-for="(item, idx) in rfcs" :key="item.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <button type="button" class="ui-table-link ui-link-button" @click="openDetail(item)">
+                    {{ item.aplikasi?.nama_aplikasi || '-' }}
+                  </button>
+                  <span class="ui-table-subtitle">RFC #{{ item.id }}</span>
                 </td>
-                <td @click.stop>
-                  <div class="action-group">
-                    <button class="action-btn table-action-btn view-btn" @click="openDetail(item)"><Icons name="eye" :size="14" /> Detail</button>
-                    <button class="action-btn table-action-btn edit-btn" @click="openEdit(item)"><Icons name="edit" :size="14" /> Edit</button>
-                    <button class="action-btn table-action-btn delete-btn" @click="confirmDelete(item)"><Icons name="trash" :size="14" /> Hapus</button>
-                  </div>
+                <td data-label="Tipe RFC">{{ item.tipe_rfc || '-' }}</td>
+                <td data-label="Pelaksana">{{ item.pelaksana || '-' }}</td>
+                <td data-label="Status">
+                  <StatusBadge :tone="rfcStatusTone(item.status_tindaklanjut)">
+                    {{ item.status_tindaklanjut || '-' }}
+                  </StatusBadge>
+                </td>
+                <td class="ui-table-actions">
+                  <IconActionCell :label="`Aksi RFC ${item.aplikasi?.nama_aplikasi || item.id}`">
+                    <IconActionButton label="Lihat detail" icon="eye" @click="openDetail(item)" />
+                    <IconActionButton label="Edit RFC" icon="edit" @click="openEdit(item)" />
+                    <IconActionButton label="Hapus RFC" icon="trash" tone="danger" @click="confirmDelete(item)" />
+                  </IconActionCell>
                 </td>
               </tr>
             </tbody>
           </DataTable>
-        </div>
+        </AsyncState>
 
-        <div v-if="pagination.lastPage > 1" class="pagination">
-          <div class="pagination-info">
-            Menampilkan {{ ((pagination.currentPage - 1) * pagination.perPage) + 1 }} - 
-            {{ Math.min(pagination.currentPage * pagination.perPage, pagination.total) }} 
-            dari {{ pagination.total }} data
-          </div>
-          <div class="pagination-controls">
-            <button @click="changePage(pagination.currentPage - 1)" :disabled="pagination.currentPage === 1" class="pagination-btn">
-              <Icons name="chevron-left" :size="16" />
-            </button>
-            <button v-for="page in rfcPageNumbers" :key="page" @click="page !== '...' && changePage(page)" :class="['pagination-btn', { active: page === pagination.currentPage, disabled: page === '...' }]">
-              {{ page }}
-            </button>
-            <button @click="changePage(pagination.currentPage + 1)" :disabled="pagination.currentPage === pagination.lastPage" class="pagination-btn">
-              <Icons name="chevron-right" :size="16" />
-            </button>
-          </div>
-        </div>
-        </div>
-      </div>
-
-      <!-- Simple Form Modal inside page -->
-      <dialog v-if="showForm" class="modal active" open :aria-labelledby="`modal-rfc-title`" @click.self="closeForm">
-        <div class="modal-content rfc-form-modal">
-          <div class="modal-header">
-            <h3 :id="`modal-rfc-title`">{{ editing ? 'Edit RFC' : 'Tambah RFC' }}</h3>
-            <button class="close-btn" :disabled="savingRfc" @click="closeForm" aria-label="Tutup modal">&times;</button>
-          </div>
-
-          <div class="rfc-stepper" aria-label="Tahap pengisian RFC">
-            <div class="rfc-step" :class="{ active: rfcStep === 1, done: rfcStep > 1 }">
-              <span>
-                <Icons v-if="rfcStep > 1" name="check" :size="12" />
-                <template v-else>1</template>
-              </span>
-              <strong>Data RFC</strong>
-            </div>
-            <div class="rfc-step-line" :class="{ active: rfcStep > 1 }"></div>
-            <div class="rfc-step" :class="{ active: rfcStep === 2 }">
-              <span>2</span>
-              <strong>Formulir RFC</strong>
-            </div>
-          </div>
-
-          <form class="rfc-form" @submit.prevent="rfcStep === 1 ? nextRfcStep() : submitRfc()">
-            <template v-if="rfcStep === 1">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="rfc-app">Nama Aplikasi <span class="required-mark">*</span></label>
-                  <div class="combobox-wrapper">
-                    <input
-                      id="rfc-app"
-                      type="text"
-                      class="combobox-input"
-                      v-model="appSearchQuery"
-                      :placeholder="getSelectedAppName() || 'Cari aplikasi...'"
-                      :disabled="!!editing"
-                      autocomplete="off"
-                      @focus="onAppInputFocus"
-                      @blur="onAppInputBlur"
-                    />
-                    <Icons name="chevron-down" :size="14" class="combobox-chevron" />
-                    <div v-if="showAppDropdown && !editing" class="combobox-dropdown">
-                      <div v-if="filteredApps.length === 0" class="combobox-empty">Tidak ditemukan</div>
-                      <button
-                        v-for="app in filteredApps"
-                        :key="app.id"
-                        type="button"
-                        class="combobox-option"
-                        :class="{ active: app.id === selectedApp }"
-                        @mousedown.prevent="selectApp(app)"
-                      >
-                        {{ app.name }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label for="rfc-type">Tipe RFC <span class="required-mark">*</span></label>
-                  <select id="rfc-type" v-model="selectedTipe">
-                    <option value="" disabled>-- Pilih Tipe --</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Standar">Standar</option>
-                    <option value="Minor">Minor</option>
-                    <option value="Major">Major</option>
-                    <option value="Darurat">Darurat</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="rfc-pelaksana">Pelaksana <span class="required-mark">*</span></label>
-                  <select id="rfc-pelaksana" v-model="selectedPelaksana">
-                    <option value="" disabled>-- Pilih Pelaksana --</option>
-                    <option value="Internal Pusdatik">Internal Pusdatik</option>
-                    <option value="Eksternal">Eksternal</option>
-                    <option value="Internal D13">Internal D13</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="rfc-status">Status <span class="required-mark">*</span></label>
-                  <select id="rfc-status" v-model="selectedStatus">
-                    <option value="" disabled>-- Pilih Status --</option>
-                    <option value="Diajukan">Diajukan</option>
-                    <option value="Analisa Desain">Analisa Desain</option>
-                    <option value="Dev-Staging">Dev-Staging</option>
-                    <option value="Production">Production</option>
-                    <option value="UAT">UAT</option>
-                  </select>
-                </div>
-              </div>
-              <div class="rfc-modal-actions">
-                <button type="button" class="btn btn-secondary" :disabled="savingRfc" @click="closeForm">Batal</button>
-                <button type="button" class="btn btn-primary" :disabled="savingRfc" @click="nextRfcStep">
-                  Lanjut
-                  <span aria-hidden="true">&rarr;</span>
-                </button>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="rfc-upload-section">
-                <div class="rfc-upload-header">
-                  <div class="rfc-upload-icon">
-                    <Icons name="file-text" :size="24" />
-                  </div>
-                  <div class="rfc-upload-copy">
-                    <h4>Unggah Formulir RFC</h4>
-                    <p>Formulir RFC wajib diunggah saat membuat RFC baru. Pada edit RFC, unggah file baru hanya jika ingin mengganti formulir sebelumnya.</p>
-                  </div>
-                </div>
-
-                <div class="rfc-template-row">
-                  <Icons name="download" :size="14" />
-                  <a
-                    href="/templates/Formulir-RFC.xlsx"
-                    class="rfc-template-link"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Buka template formulir RFC
-                  </a>
-                </div>
-
-                <a
-                  v-if="editing?.formulir_url"
-                  :href="editing.formulir_url"
-                  class="existing-file-link"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  <Icons name="file-text" :size="16" />
-                  Lihat formulir RFC saat ini
-                </a>
-
-                <div class="rfc-upload-area" :class="{ 'has-file': !!rfcFile }">
-                  <template v-if="!rfcFile">
-                    <label class="rfc-upload-label" for="rfc-formulir-input">
-                      <Icons name="upload" :size="28" />
-                      <strong>Pilih Formulir RFC</strong>
-                      <span>PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB</span>
-                    </label>
-                    <input
-                      id="rfc-formulir-input"
-                      ref="rfcFileInput"
-                      type="file"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      @change="onRfcFileChange"
-                    />
-                  </template>
-                  <template v-else>
-                    <div class="rfc-file-preview">
-                      <Icons name="file-text" :size="28" />
-                      <div>
-                        <span class="rfc-file-name">{{ rfcFile.name }}</span>
-                        <span class="rfc-file-size">{{ (rfcFile.size / 1024).toFixed(1) }} KB</span>
-                      </div>
-                      <button type="button" class="rfc-remove-file-btn" @click="removeRfcFile" aria-label="Hapus file RFC">
-                        <Icons name="trash" :size="16" />
-                      </button>
-                    </div>
-                  </template>
-                </div>
-              </div>
-
-              <div class="rfc-modal-actions">
-                <button type="button" class="btn btn-secondary" :disabled="savingRfc" @click="previousRfcStep">
-                  <span aria-hidden="true">&larr;</span>
-                  Kembali
-                </button>
-                <button type="submit" class="btn btn-primary" :disabled="savingRfc || (!editing && !rfcFile)">
-                  <Icons v-if="!savingRfc" name="check" :size="14" />
-                  {{ savingRfc ? 'Menyimpan...' : (editing ? 'Simpan RFC' : 'Kirim RFC') }}
-                </button>
-              </div>
-            </template>
-          </form>
-        </div>
-      </dialog>
-
-      <!-- Delete Confirmation Modal -->
-      <dialog v-if="showDeleteModal" class="modal active" open aria-labelledby="modal-delete-title" @click.self="closeDeleteModal">
-        <div class="modal-content confirm-modal">
-          <div class="confirm-header">
-            <Icons name="alert" :size="48" class="confirm-icon" />
-            <h3 id="modal-delete-title">Hapus RFC</h3>
-          </div>
-          <div class="confirm-body">
-            <p>RFC berikut akan dihapus permanen beserta formulir yang diunggah:</p>
-            <p class="confirm-target"><strong>{{ deleteTarget?.aplikasi?.nama_aplikasi || '-' }}</strong></p>
-            <p class="confirm-warning">Tindakan ini tidak dapat dibatalkan.</p>
-          </div>
-          <div class="confirm-actions">
-            <button class="btn btn-secondary" :disabled="deletingRfc" @click="closeDeleteModal">Batal</button>
-            <button class="btn btn-danger" :disabled="deletingRfc" @click="deleteRfc">
-              <Icons name="trash" :size="14" />
-              {{ deletingRfc ? 'Menghapus...' : 'Hapus' }}
-            </button>
-          </div>
-        </div>
-      </dialog>
+        <PaginationBar
+          :page="pagination.currentPage"
+          :last-page="pagination.lastPage"
+          :total="pagination.total"
+          item-label="RFC"
+          @change="changePage"
+        />
+      </section>
     </div>
-  </PengelolaLayout>
+
+      <Modal
+        :model-value="showForm"
+        :title="editing ? 'Edit RFC' : 'Tambah RFC'"
+        description="Lengkapi data perubahan dan formulir resmi RFC."
+        size="lg"
+        variant="centered"
+        :persistent="savingRfc"
+        @update:model-value="handleFormModalChange"
+      >
+        <Stepper :steps="rfcSteps" :current-step="rfcStep - 1" orientation="horizontal" />
+        <form class="rfc-form idds-rfc-form" @submit.prevent="rfcStep === 1 ? nextRfcStep() : submitRfc()">
+          <template v-if="rfcStep === 1">
+            <div class="form-row idds-form-grid">
+              <IddsSelect
+                v-model="selectedApp"
+                :options="applicationOptions"
+                label="Nama aplikasi"
+                placeholder="Cari atau pilih aplikasi"
+                :disabled="!!editing || savingRfc"
+                required
+                width="100%"
+              />
+              <IddsSelect
+                v-model="selectedTipe"
+                :options="rfcTypeOptions"
+                label="Tipe RFC"
+                placeholder="Pilih tipe RFC"
+                required
+                width="100%"
+              />
+              <IddsSelect
+                v-model="selectedPelaksana"
+                :options="executorOptions"
+                label="Pelaksana"
+                placeholder="Pilih pelaksana"
+                required
+                width="100%"
+              />
+              <IddsSelect
+                v-model="selectedStatus"
+                :options="statusOptions"
+                label="Status"
+                placeholder="Pilih status"
+                required
+                width="100%"
+              />
+            </div>
+            <div class="rfc-modal-actions">
+              <Button hierarchy="secondary" size="lg" type="button" :disabled="savingRfc" @click="closeForm">Batal</Button>
+              <Button hierarchy="primary" size="lg" type="button" :suffix-icon="IconArrowRight" :disabled="savingRfc" @click="nextRfcStep">Lanjut</Button>
+            </div>
+          </template>
+
+          <template v-else>
+            <section class="idds-upload-section" aria-labelledby="pengelola-rfc-upload-title">
+              <div>
+                <h4 id="pengelola-rfc-upload-title">Formulir RFC</h4>
+                <p>File wajib untuk RFC baru. Saat mengedit, pilih file hanya jika formulir perlu diganti.</p>
+              </div>
+              <div class="idds-inline-links">
+                <a href="/templates/Formulir-RFC.xlsx" class="rfc-template-link" target="_blank" rel="noopener">Buka template formulir RFC</a>
+                <a v-if="editing?.formulir_url" :href="editing.formulir_url" class="rfc-template-link" target="_blank" rel="noopener">Lihat formulir saat ini</a>
+              </div>
+              <SingleFileUpload
+                title="Pilih formulir RFC"
+                description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB"
+                accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                :allowed-extensions="['pdf', 'doc', 'docx', 'xls', 'xlsx']"
+                :max-size="10 * 1024 * 1024"
+                :validate-magic-number="true"
+                :disabled="savingRfc"
+                @change="onRfcFileChange"
+                @remove="removeRfcFile"
+              />
+            </section>
+            <div class="rfc-modal-actions">
+              <Button hierarchy="secondary" size="lg" type="button" :prefix-icon="IconArrowLeft" :disabled="savingRfc" @click="previousRfcStep">Kembali</Button>
+              <Button hierarchy="primary" size="lg" type="submit" :prefix-icon="IconCheck" :disabled="savingRfc || (!editing && !rfcFile)">
+                {{ savingRfc ? 'Menyimpan...' : (editing ? 'Simpan RFC' : 'Kirim RFC') }}
+              </Button>
+            </div>
+          </template>
+        </form>
+      </Modal>
+
+      <ConfirmationDrawer
+        v-model="showDeleteModal"
+        title="Hapus RFC"
+        description="RFC dan formulir yang terkait akan dihapus permanen. Tindakan ini tidak dapat dibatalkan."
+        :subject="deleteTarget?.aplikasi?.nama_aplikasi || 'RFC'"
+        confirm-label="Hapus RFC"
+        :loading="deletingRfc"
+        @confirm="deleteRfc"
+        @cancel="closeDeleteModal"
+      />
+  </div>
  </template>
 
 <style scoped>
@@ -693,10 +543,6 @@ async function submitRfc() {
 
 .col-aksi {
   width: 300px;
-}
-
-.action-group {
-  flex-wrap: wrap;
 }
 
 .rfc-form {
@@ -716,7 +562,7 @@ async function submitRfc() {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--notion-text-tertiary);
+  color: var(--ina-content-tertiary);
   transition: all 0.3s ease;
   white-space: nowrap;
 }
@@ -725,22 +571,23 @@ async function submitRfc() {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--notion-bg-secondary);
-  border: 1px solid var(--notion-border);
+  background: var(--ina-background-secondary);
+  border: 1px solid var(--ina-stroke-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   transition: all 0.3s ease;
+  line-height: var(--idds-caption-line);
 }
 
-.rfc-step.active { color: var(--notion-text); }
+.rfc-step.active { color: var(--ina-content-primary); }
 .rfc-step.done { color: #10b981; }
 
 .rfc-step.active span {
-  background: var(--notion-blue);
-  border-color: var(--notion-blue);
+  background: var(--ina-primary-primary);
+  border-color: var(--ina-primary-primary);
   color: #fff;
 }
 
@@ -753,7 +600,7 @@ async function submitRfc() {
 .rfc-step-line {
   flex: 1;
   height: 2px;
-  background: var(--notion-border);
+  background: var(--ina-stroke-primary);
   margin: 0 16px;
   border-radius: 2px;
   transition: all 0.3s ease;
@@ -778,40 +625,42 @@ async function submitRfc() {
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: var(--notion-blue-bg, #eff6ff);
+  background: var(--ina-primary-50, #eff6ff);
   border: 1px solid rgba(59, 130, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--notion-blue, #2563eb);
+  color: var(--ina-primary-primary, #2563eb);
 }
 
 .rfc-upload-copy h4 {
   margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--notion-text);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-body-small-line);
 }
 
 .rfc-upload-copy p {
   margin: 0;
-  color: var(--notion-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-template-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .rfc-template-link {
-  font-size: 13px;
-  color: var(--notion-blue);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-primary-primary);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-template-link:hover {
@@ -823,8 +672,8 @@ async function submitRfc() {
   align-items: center;
   gap: 8px;
   width: fit-content;
-  color: var(--notion-blue-dark);
-  font-weight: 700;
+  color: var(--ina-primary-700);
+  font-weight: var(--idds-weight-bold);
   text-decoration: none;
 }
 
@@ -833,9 +682,9 @@ async function submitRfc() {
 }
 
 .rfc-upload-area {
-  border: 2px dashed var(--notion-border);
+  border: 2px dashed var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   min-height: auto;
   display: flex;
   align-items: center;
@@ -844,8 +693,8 @@ async function submitRfc() {
 }
 
 .rfc-upload-area:hover {
-  border-color: var(--notion-blue);
-  background: var(--notion-blue-bg, #eff6ff);
+  border-color: var(--ina-primary-primary);
+  background: var(--ina-primary-50, #eff6ff);
 }
 
 .rfc-upload-area.has-file {
@@ -864,17 +713,19 @@ async function submitRfc() {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
   text-align: center;
 }
 
 .rfc-upload-label strong {
-  color: var(--notion-blue-dark);
-  font-size: 15px;
+  color: var(--ina-primary-700);
+  font-size: var(--idds-body-small-size);
+  line-height: var(--idds-body-small-line);
 }
 
 .rfc-upload-label span {
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-upload-area input[type='file'] {
@@ -888,7 +739,7 @@ async function submitRfc() {
   align-items: center;
   gap: 12px;
   padding: 20px;
-  color: var(--notion-blue-dark);
+  color: var(--ina-primary-700);
 }
 
 .rfc-file-name,
@@ -897,14 +748,15 @@ async function submitRfc() {
 }
 
 .rfc-file-name {
-  font-weight: 800;
-  color: var(--notion-text);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
 }
 
 .rfc-file-size {
   margin-top: 3px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .rfc-remove-file-btn {
@@ -941,19 +793,20 @@ async function submitRfc() {
 .rfc-detail-grid span {
   display: block;
   margin-bottom: 6px;
-  color: var(--notion-text-secondary);
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-small-size);
+  font-weight: var(--idds-weight-bold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-caption-small-line);
 }
 
 .rfc-detail-grid strong,
 .rfc-detail-grid p {
   margin: 0;
-  color: var(--notion-text);
-  font-size: 14px;
-  line-height: 1.45;
+  color: var(--ina-content-primary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-detail-full {
@@ -961,8 +814,8 @@ async function submitRfc() {
 }
 
 .required-mark {
-  color: var(--notion-red);
-  font-weight: 800;
+  color: var(--ina-negative-600);
+  font-weight: var(--idds-weight-bold);
 }
 
 .rfc-modal-actions {
@@ -985,7 +838,7 @@ async function submitRfc() {
   position: relative;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -1016,16 +869,17 @@ async function submitRfc() {
 .stat-icon-wrap.bg-red { background: #fef2f2; color: #ef4444; }
 
 .stat-label {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-line);
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h4-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
-  line-height: 1.2;
+  line-height: var(--idds-heading-h4-line);
 }
 
 .stat-card::after {
@@ -1052,8 +906,8 @@ async function submitRfc() {
 @media (max-width: 768px) {
   .stats-grid { grid-template-columns: 1fr; }
   .stat-card { padding: 16px; }
-  .stat-value { font-size: 24px; }
-  .stat-label { font-size: 13px; }
+  .stat-value { font-size: var(--idds-heading-h5-size); line-height: var(--idds-heading-h5-line); }
+  .stat-label { font-size: var(--idds-caption-size); line-height: var(--idds-caption-line); }
   .rfc-form-modal {
     width: min(100vw - 20px, 760px);
     max-height: calc(100vh - 20px);
@@ -1077,8 +931,8 @@ async function submitRfc() {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 20px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -1089,7 +943,8 @@ async function submitRfc() {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link {
@@ -1098,29 +953,31 @@ async function submitRfc() {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .ah-bc-link:hover { color: rgba(255, 255, 255, 0.9); }
 .ah-bc-sep { color: rgba(255, 255, 255, 0.35); }
-.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: 500; }
+.ah-bc-current { color: rgba(255, 255, 255, 0.8); font-weight: var(--idds-weight-medium); }
 
 .workspace-hero-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .workspace-hero-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.7);
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 
 @media (max-width: 768px) {
@@ -1140,10 +997,6 @@ async function submitRfc() {
     flex-direction: column;
   }
 
-  .data-card-head-actions .search-group {
-    max-width: 100%;
-    width: 100%;
-  }
 }
 
 /* Searchable Combobox */
@@ -1154,25 +1007,26 @@ async function submitRfc() {
 .combobox-input {
   width: 100%;
   padding: 10px 36px 10px 12px;
-  border: 1px solid var(--notion-border);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 6px;
-  background: var(--notion-bg);
-  font-size: 14px;
-  color: var(--notion-text);
+  background: var(--ina-background-primary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
   cursor: text;
   transition: border-color 0.15s;
+  line-height: var(--idds-caption-line);
 }
 
 .combobox-input:focus {
   outline: none;
-  border-color: var(--notion-blue);
+  border-color: var(--ina-primary-primary);
   box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.08);
 }
 
 .combobox-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: var(--notion-muted-surface, #f5f5f5);
+  background: var(--ina-background-secondary, #f5f5f5);
 }
 
 .combobox-chevron {
@@ -1180,7 +1034,7 @@ async function submitRfc() {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
   pointer-events: none;
 }
 
@@ -1189,8 +1043,8 @@ async function submitRfc() {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: var(--notion-bg);
-  border: 1px solid var(--notion-border);
+  background: var(--ina-background-primary);
+  border: 1px solid var(--ina-stroke-primary);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   max-height: 200px;
@@ -1208,7 +1062,7 @@ async function submitRfc() {
 }
 
 .combobox-dropdown::-webkit-scrollbar-thumb {
-  background: var(--notion-border);
+  background: var(--ina-stroke-primary);
   border-radius: 3px;
 }
 
@@ -1220,27 +1074,29 @@ async function submitRfc() {
   border: none;
   background: transparent;
   border-radius: 6px;
-  font-size: 14px;
-  color: var(--notion-text);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
   cursor: pointer;
   transition: background 0.1s;
+  line-height: var(--idds-caption-line);
 }
 
 .combobox-option:hover {
-  background: var(--notion-hover);
+  background: var(--ina-background-tertiary);
 }
 
 .combobox-option.active {
   background: rgba(30, 58, 138, 0.08);
-  color: var(--notion-blue);
-  font-weight: 600;
+  color: var(--ina-primary-primary);
+  font-weight: var(--idds-weight-semibold);
 }
 
 .combobox-empty {
   padding: 12px;
   text-align: center;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 </style>
 

@@ -353,6 +353,56 @@ class AplikasiCrudTest extends TestCase
         $response->assertJsonCount(1, 'data');
     }
 
+    public function test_unit_kerja_stats_only_count_visible_applications(): void
+    {
+        Aplikasi::factory()->create([
+            'created_by' => $this->unitKerjaUser->id,
+            'status' => Aplikasi::STATUS_DIAJUKAN,
+        ]);
+        Aplikasi::factory()->create([
+            'created_by' => $this->unitKerjaUser->id,
+            'status' => Aplikasi::STATUS_DEPLOYED_PRODUCTION,
+        ]);
+        Aplikasi::factory()->create([
+            'created_by' => $this->unitKerjaUser->id,
+            'status' => Aplikasi::STATUS_NONAKTIF,
+        ]);
+
+        $otherUnit = User::factory()->create(['role' => 'unit_kerja']);
+        Aplikasi::factory()->create([
+            'created_by' => $otherUnit->id,
+            'status' => Aplikasi::STATUS_DIAJUKAN,
+        ]);
+        Aplikasi::factory()->create([
+            'created_by' => $this->pengelolaUser->id,
+            'status' => Aplikasi::STATUS_DEPLOYED_PRODUCTION,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
+            ->getJson('/api/aplikasi/stats')
+            ->assertStatus(200)
+            ->assertJsonPath('data.development', 1)
+            ->assertJsonPath('data.operational', 1)
+            ->assertJsonPath('data.inactive', 1)
+            ->assertJsonPath('data.stopped', 0);
+    }
+
+    public function test_new_unit_kerja_has_empty_list_and_stats(): void
+    {
+        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
+            ->getJson('/api/aplikasi')
+            ->assertStatus(200)
+            ->assertJsonCount(0, 'data');
+
+        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
+            ->getJson('/api/aplikasi/stats')
+            ->assertStatus(200)
+            ->assertJsonPath('data.development', 0)
+            ->assertJsonPath('data.operational', 0)
+            ->assertJsonPath('data.inactive', 0)
+            ->assertJsonPath('data.stopped', 0);
+    }
+
     public function test_unit_kerja_cannot_see_pengelola_created_uat_application_for_review(): void
     {
         $uatApp = Aplikasi::factory()->create([

@@ -1,25 +1,38 @@
 <script setup>
+import {
+  Alert,
+  Button,
+  Modal,
+  SingleFileUpload,
+  Stepper,
+} from '@idds/vue'
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconPlus,
+} from '@tabler/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import http from '../lib/http'
-import UserLayout from '../layouts/UserLayout.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import AsyncState from '../components/AsyncState.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
-import { useAuthStore } from '../stores/auth'
+import IddsSelect from '../components/IddsSelect.vue'
+import MetricCard from '../components/MetricCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { useToastStore } from '../stores/toast'
-import { getHomeByRole } from '../constants/roles'
 import { getRfcStatusBadgeClass } from '../constants/status'
-import { usePagination } from '../composables/usePagination.js'
+import { resolveIddsFileSelection } from '../utils/fileUpload'
 import { warnDev } from '../utils/logger'
 
-const router = useRouter()
-const auth = useAuthStore()
 const toast = useToastStore()
 
 const rfcs = ref([])
 const productionApps = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const saving = ref(false)
 const search = ref('')
 const showForm = ref(false)
@@ -27,16 +40,28 @@ const selectedApp = ref('')
 const selectedTipe = ref('')
 const formStep = ref(1)
 const rfcFile = ref(null)
-const rfcFileInput = ref(null)
-const pagination = ref({ currentPage: 1, lastPage: 1, perPage: 10, total: 0 })
+const pagination = ref({ currentPage: 1, lastPage: 1, perPage: 30, total: 0 })
 const stats = ref({ total: 0, diajukan: 0, diproses: 0, production: 0 })
-const { pageNumbers } = usePagination(pagination)
 
 let searchTimer = null
 
-const basePath = computed(() => getHomeByRole(auth.role).path)
 const hasActiveSearch = computed(() => !!search.value?.trim())
 const canSubmit = computed(() => productionApps.value.length > 0)
+const applicationOptions = computed(() => productionApps.value.map((app) => ({
+  label: `${app.name}${app.layanan ? ` - ${app.layanan}` : ''}`,
+  value: app.id,
+})))
+const rfcTypeOptions = [
+  { label: 'Medium', value: 'Medium' },
+  { label: 'Standar', value: 'Standar' },
+  { label: 'Minor', value: 'Minor' },
+  { label: 'Major', value: 'Major' },
+  { label: 'Darurat', value: 'Darurat' },
+]
+const rfcSteps = [
+  { label: 'Data RFC' },
+  { label: 'Formulir RFC' },
+]
 
 onMounted(async () => {
   await Promise.all([loadRfcs(), loadProductionApps(), loadRfcStats()])
@@ -48,6 +73,7 @@ onBeforeUnmount(() => {
 
 async function loadRfcs(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const q = search.value?.trim() ? `q=${encodeURIComponent(search.value.trim())}&` : ''
     const response = await http.get(`/rfc?${q}per_page=${pagination.value.perPage}&page=${page}`)
@@ -58,7 +84,7 @@ async function loadRfcs(page = 1) {
       pagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || pagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || pagination.value.perPage || 30,
         total: Number(meta.total) || 0,
       }
     } else {
@@ -67,6 +93,7 @@ async function loadRfcs(page = 1) {
     }
   } catch (error) {
     warnDev('[UnitKerjaRfc] loadRfcs error:', error)
+    loadError.value = 'Daftar RFC belum dapat dimuat. Periksa koneksi lalu coba lagi.'
     toast.push('Tidak dapat memuat daftar RFC.', 'error', 4000)
   } finally {
     loading.value = false
@@ -113,7 +140,6 @@ function resetForm() {
   selectedApp.value = ''
   selectedTipe.value = ''
   rfcFile.value = null
-  if (rfcFileInput.value) rfcFileInput.value.value = ''
 }
 
 function closeForm() {
@@ -165,13 +191,17 @@ function previousStep() {
   formStep.value = 1
 }
 
-function onRfcFileChange(event) {
-  rfcFile.value = event.target.files?.[0] || null
+function onRfcFileChange(file, validation) {
+  const selection = resolveIddsFileSelection(file, validation, 'File tidak sesuai ketentuan.')
+  rfcFile.value = selection.file
+
+  if (selection.error) {
+    toast.push(selection.error, 'error')
+  }
 }
 
 function removeRfcFile() {
   rfcFile.value = null
-  if (rfcFileInput.value) rfcFileInput.value.value = ''
 }
 
 function scheduleSearch() {
@@ -203,333 +233,200 @@ function formatDate(value) {
     year: 'numeric',
   })
 }
+
+function rfcStatusTone(status) {
+  const badgeClass = getRfcStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
+}
+
+function handleFormModalChange(open) {
+  if (!open) closeForm()
+}
 </script>
 
 <template>
-  <UserLayout>
-    <div class="container uk-rfc-page">
-      <div class="uk-welcome-card">
-        <div class="uk-welcome-text">
-          <nav class="uk-welcome-breadcrumb" aria-label="breadcrumb">
-            <button type="button" @click="router.push(basePath)" class="uk-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="uk-bc-sep">/</span>
-            <span class="uk-bc-current">Pengajuan RFC</span>
-          </nav>
-          <h2 class="uk-welcome-title">Pengajuan RFC</h2>
-          <p class="uk-welcome-sub">Ajukan perubahan untuk aplikasi operasional milik unit kerja Anda.</p>
-        </div>
-        <button
-          type="button"
-          class="btn btn-light-primary"
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Unit Kerja"
+      title="Pengajuan RFC"
+      description="Ajukan perubahan untuk aplikasi production milik unit kerja Anda."
+    >
+      <template #actions>
+        <Button
+          hierarchy="primary"
+          size="lg"
+          :prefix-icon="IconPlus"
           :disabled="!canSubmit"
           @click="openForm"
         >
-          <Icons name="plus" :size="16" />
           Ajukan RFC
-        </button>
-      </div>
+        </Button>
+      </template>
+    </PageHeader>
 
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <div class="stat-header">
-            <span class="stat-label">Total RFC</span>
-            <div class="stat-icon-wrap bg-blue">
-              <Icons name="file-text" :size="18" />
-            </div>
+    <div class="ui-page-content">
+      <section class="ui-metric-grid" aria-label="Ringkasan RFC">
+        <MetricCard label="Total RFC" :value="stats.total" icon="file-text" tone="blue" />
+        <MetricCard label="Diajukan" :value="stats.diajukan" icon="file" tone="amber" />
+        <MetricCard label="Diproses" :value="stats.diproses" icon="code" tone="violet" />
+        <MetricCard label="Production" :value="stats.production" icon="check-circle" tone="green" />
+      </section>
+
+      <Alert
+        v-if="!canSubmit"
+        variant="caution"
+        title="Belum ada aplikasi production"
+        message="RFC dapat diajukan setelah aplikasi milik unit kerja Anda berstatus production."
+      />
+
+      <section class="ui-panel" aria-labelledby="unit-rfc-list-title">
+        <header class="ui-panel-header">
+          <div>
+            <h2 id="unit-rfc-list-title">Riwayat RFC Anda</h2>
+            <p class="ui-table-subtitle">{{ pagination.total }} pengajuan perubahan</p>
           </div>
-          <div class="stat-value">{{ stats.total }}</div>
-        </div>
-        <div class="stat-card submitted">
-          <div class="stat-header">
-            <span class="stat-label">Diajukan</span>
-            <div class="stat-icon-wrap bg-amber">
-              <Icons name="file" :size="18" />
-            </div>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="search"
+              label="Cari RFC"
+              placeholder="Cari RFC"
+              @update:model-value="scheduleSearch"
+            />
           </div>
-          <div class="stat-value">{{ stats.diajukan }}</div>
-        </div>
-        <div class="stat-card progress">
-          <div class="stat-header">
-            <span class="stat-label">Diproses</span>
-            <div class="stat-icon-wrap bg-indigo">
-              <Icons name="code" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.diproses }}</div>
-        </div>
-        <div class="stat-card done">
-          <div class="stat-header">
-            <span class="stat-label">Production</span>
-            <div class="stat-icon-wrap bg-green">
-              <Icons name="check-circle" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.production }}</div>
-        </div>
-      </div>
+        </header>
 
-      <div v-if="!canSubmit" class="notice-card">
-        <Icons name="alert-circle" :size="18" />
-        <span>RFC dapat diajukan setelah aplikasi Anda berstatus deployed production.</span>
-      </div>
-
-      <div class="content-section active">
-        <div class="card uk-card">
-          <DataCardHead title="Daftar RFC Anda">
-            <template #actions>
-              <div class="search-group">
-                <span class="search-icon">
-                  <Icons name="search" :size="16" />
-                </span>
-                <input
-                  type="search"
-                  v-model="search"
-                  @input="scheduleSearch"
-                  placeholder="Cari RFC..."
-                  maxlength="50"
-                  aria-label="Cari RFC"
-                />
-              </div>
-              <button
-                class="btn btn-primary"
-                type="button"
-                :disabled="!canSubmit"
-                @click="openForm"
-              >
-                <Icons name="plus" :size="16" />
-                Ajukan RFC
-              </button>
-            </template>
-          </DataCardHead>
-
-          <div v-if="loading" class="loading-state">
-            <div class="loading-spinner"></div>
-            <p>Memuat daftar RFC...</p>
-          </div>
-
-          <div v-else-if="rfcs.length === 0 && hasActiveSearch" class="global-empty">
-            <div class="global-empty-icon-wrapper">
-              <Icons name="search" :size="48" class="global-empty-icon" />
-            </div>
-            <h3 class="global-empty-title">Tidak Ada Hasil</h3>
-            <p class="global-empty-text">Tidak ada RFC yang cocok dengan kata kunci pencarian ini.</p>
-            <button type="button" class="btn btn-secondary" @click="clearSearch">Hapus pencarian</button>
-          </div>
-
-          <div v-else-if="rfcs.length === 0" class="global-empty">
-            <div class="global-empty-icon-wrapper">
-              <Icons name="file-text" :size="48" class="global-empty-icon" />
-            </div>
-            <h3 class="global-empty-title">Belum Ada RFC</h3>
-            <p class="global-empty-text">Ajukan RFC pertama untuk perubahan aplikasi operasional unit kerja Anda.</p>
-            <button
-              type="button"
-              class="btn btn-primary"
-              :disabled="!canSubmit"
-              @click="openForm"
-            >
-              <Icons name="plus" :size="16" />
-              Ajukan RFC
-            </button>
-          </div>
-
-          <template v-else>
-            <DataTable>
-              <thead>
-                <tr>
-                  <th scope="col" class="col-num">#</th>
-                  <th scope="col">Nama Aplikasi</th>
-                  <th scope="col">Tipe RFC</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Tanggal</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, idx) in rfcs" :key="item.id" class="data-table-row">
-                  <td class="col-num">{{ rowNumber(idx) }}</td>
-                  <td>
-                    <div class="app-name-cell">
-                      <span class="app-name-main">{{ item.aplikasi?.nama_aplikasi || '-' }}</span>
-                      <span class="app-name-sub">RFC #{{ item.id }}</span>
-                    </div>
-                  </td>
-                  <td>{{ item.tipe_rfc }}</td>
-                  <td>
-                    <span :class="['badge', getRfcStatusBadgeClass(item.status_tindaklanjut)]">
-                      {{ item.status_tindaklanjut }}
-                    </span>
-                  </td>
-                  <td class="col-date">{{ formatDate(item.created_at) }}</td>
-                </tr>
-              </tbody>
-            </DataTable>
-
-            <div v-if="pagination.lastPage > 1" class="pagination">
-              <div class="pagination-info">
-                Menampilkan {{ ((pagination.currentPage - 1) * pagination.perPage) + 1 }} -
-                {{ Math.min(pagination.currentPage * pagination.perPage, pagination.total) }}
-                dari {{ pagination.total }} RFC
-              </div>
-              <div class="pagination-controls">
-                <button
-                  type="button"
-                  @click="changePage(pagination.currentPage - 1)"
-                  :disabled="pagination.currentPage === 1"
-                  class="pagination-btn"
-                >
-                  <Icons name="chevron-left" :size="16" />
-                </button>
-                <button
-                  v-for="page in pageNumbers"
-                  :key="page"
-                  type="button"
-                  @click="changePage(page)"
-                  :class="['pagination-btn', { active: page === pagination.currentPage, disabled: page === '...' }]"
-                >
-                  {{ page }}
-                </button>
-                <button
-                  type="button"
-                  @click="changePage(pagination.currentPage + 1)"
-                  :disabled="pagination.currentPage === pagination.lastPage"
-                  class="pagination-btn"
-                >
-                  <Icons name="chevron-right" :size="16" />
-                </button>
-              </div>
-            </div>
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="rfcs.length === 0"
+          :empty-icon="hasActiveSearch ? 'search' : 'file-text'"
+          :empty-title="hasActiveSearch ? 'RFC tidak ditemukan' : 'Belum ada RFC'"
+          :empty-description="hasActiveSearch
+            ? 'Coba kata kunci lain atau hapus pencarian.'
+            : 'Belum ada pengajuan perubahan untuk aplikasi production unit kerja Anda.'"
+          @retry="loadRfcs(pagination.currentPage)"
+        >
+          <template v-if="hasActiveSearch" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearSearch">
+              Hapus pencarian
+            </Button>
           </template>
-        </div>
-      </div>
+
+          <DataTable>
+            <thead>
+              <tr>
+                <th scope="col" class="col-num">#</th>
+                <th scope="col">Nama aplikasi</th>
+                <th scope="col">Tipe RFC</th>
+                <th scope="col">Status</th>
+                <th scope="col">Tanggal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in rfcs" :key="item.id">
+                <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
+                <td data-primary="true">
+                  <span class="ui-table-primary">{{ item.aplikasi?.nama_aplikasi || '-' }}</span>
+                  <span class="ui-table-subtitle">RFC #{{ item.id }}</span>
+                </td>
+                <td data-label="Tipe RFC">{{ item.tipe_rfc || '-' }}</td>
+                <td data-label="Status">
+                  <StatusBadge :tone="rfcStatusTone(item.status_tindaklanjut)">
+                    {{ item.status_tindaklanjut || '-' }}
+                  </StatusBadge>
+                </td>
+                <td data-label="Tanggal">{{ formatDate(item.created_at) }}</td>
+              </tr>
+            </tbody>
+          </DataTable>
+        </AsyncState>
+
+        <PaginationBar
+          :page="pagination.currentPage"
+          :last-page="pagination.lastPage"
+          :total="pagination.total"
+          item-label="RFC"
+          @change="changePage"
+        />
+      </section>
     </div>
 
-    <dialog v-if="showForm" class="modal active" open aria-labelledby="modal-rfc-title" @click.self="closeForm">
-      <div class="modal-content rfc-form-modal">
-        <div class="modal-header">
-          <h3 id="modal-rfc-title">Ajukan RFC</h3>
-          <button class="close-btn" type="button" :disabled="saving" @click="closeForm">&times;</button>
-        </div>
-
-        <div class="rfc-stepper" aria-label="Tahap pengajuan RFC">
-          <div class="rfc-step" :class="{ active: formStep === 1, done: formStep > 1 }">
-            <span>
-              <Icons v-if="formStep > 1" name="check" :size="12" />
-              <template v-else>1</template>
-            </span>
-            <strong>Data RFC</strong>
+    <Modal
+      :model-value="showForm"
+      title="Ajukan RFC"
+      description="Lengkapi data perubahan dan unggah formulir resmi."
+      size="lg"
+      variant="centered"
+      :persistent="saving"
+      @update:model-value="handleFormModalChange"
+    >
+      <Stepper :steps="rfcSteps" :current-step="formStep - 1" orientation="horizontal" />
+      <form class="rfc-form idds-rfc-form" @submit.prevent="formStep === 1 ? nextStep() : submitRfc()">
+        <template v-if="formStep === 1">
+          <IddsSelect
+            v-model="selectedApp"
+            :options="applicationOptions"
+            label="Aplikasi production"
+            placeholder="Pilih aplikasi"
+            :disabled="saving || productionApps.length === 0"
+            required
+            width="100%"
+          />
+          <IddsSelect
+            v-model="selectedTipe"
+            :options="rfcTypeOptions"
+            label="Tipe RFC"
+            placeholder="Pilih tipe RFC"
+            :disabled="saving"
+            required
+            width="100%"
+          />
+          <div class="rfc-modal-actions">
+            <Button hierarchy="secondary" size="lg" type="button" :disabled="saving" @click="closeForm">
+              Batal
+            </Button>
+            <Button hierarchy="primary" size="lg" type="button" :suffix-icon="IconArrowRight" :disabled="saving" @click="nextStep">
+              Lanjut
+            </Button>
           </div>
-          <div class="rfc-step-line" :class="{ active: formStep > 1 }"></div>
-          <div class="rfc-step" :class="{ active: formStep === 2 }">
-            <span>2</span>
-            <strong>Formulir RFC</strong>
+        </template>
+
+        <template v-else>
+          <section class="idds-upload-section" aria-labelledby="unit-rfc-upload-title">
+            <div>
+              <h4 id="unit-rfc-upload-title">Formulir RFC</h4>
+              <p>Unggah satu dokumen resmi berformat PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB.</p>
+            </div>
+            <a href="/templates/Formulir-RFC.xlsx" class="rfc-template-link" target="_blank" rel="noopener">
+              Buka template formulir RFC
+            </a>
+            <SingleFileUpload
+              title="Pilih formulir RFC"
+              description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB"
+              accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              :allowed-extensions="['pdf', 'doc', 'docx', 'xls', 'xlsx']"
+              :max-size="10 * 1024 * 1024"
+              :validate-magic-number="true"
+              :disabled="saving"
+              @change="onRfcFileChange"
+              @remove="removeRfcFile"
+            />
+          </section>
+          <div class="rfc-modal-actions">
+            <Button hierarchy="secondary" size="lg" type="button" :prefix-icon="IconArrowLeft" :disabled="saving" @click="previousStep">
+              Kembali
+            </Button>
+            <Button hierarchy="primary" size="lg" type="submit" :prefix-icon="IconCheck" :disabled="saving || !rfcFile">
+              {{ saving ? 'Mengirim...' : 'Kirim pengajuan' }}
+            </Button>
           </div>
-        </div>
-
-        <form class="rfc-form" @submit.prevent="formStep === 1 ? nextStep() : submitRfc()">
-          <template v-if="formStep === 1">
-            <div class="form-group">
-              <label for="rfc-app">Aplikasi Production <span class="required-mark">*</span></label>
-              <select id="rfc-app" v-model="selectedApp" :disabled="saving || productionApps.length === 0">
-                <option value="" disabled>-- Pilih aplikasi --</option>
-                <option v-for="app in productionApps" :key="app.id" :value="app.id">
-                  {{ app.name }}{{ app.layanan ? ` - ${app.layanan}` : '' }}
-                </option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label for="rfc-type">Tipe RFC <span class="required-mark">*</span></label>
-              <select id="rfc-type" v-model="selectedTipe" :disabled="saving">
-                <option value="" disabled>-- Pilih tipe --</option>
-                <option value="Medium">Medium</option>
-                <option value="Standar">Standar</option>
-                <option value="Minor">Minor</option>
-                <option value="Major">Major</option>
-                <option value="Darurat">Darurat</option>
-              </select>
-            </div>
-
-            <div class="rfc-modal-actions">
-              <button type="button" class="btn btn-secondary" :disabled="saving" @click="closeForm">Batal</button>
-              <button type="button" class="btn btn-primary" :disabled="saving" @click="nextStep">
-                Lanjut
-                <span aria-hidden="true">&rarr;</span>
-              </button>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="rfc-upload-section">
-              <div class="rfc-upload-header">
-                <div class="rfc-upload-icon">
-                  <Icons name="file-text" :size="24" />
-                </div>
-                <div class="rfc-upload-copy">
-                  <h4>Unggah Formulir RFC</h4>
-                  <p>Unggah formulir RFC resmi. Dokumen ini wajib agar pengajuan dapat diproses.</p>
-                </div>
-              </div>
-
-              <div class="rfc-template-row">
-                <Icons name="download" :size="14" />
-                <a
-                  href="/templates/Formulir-RFC.xlsx"
-                  class="rfc-template-link"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Buka template formulir RFC
-                </a>
-              </div>
-
-              <div class="rfc-upload-area" :class="{ 'has-file': !!rfcFile }">
-                <template v-if="!rfcFile">
-                  <label class="rfc-upload-label" for="unit-rfc-formulir-input">
-                    <Icons name="upload" :size="28" />
-                    <strong>Pilih Formulir RFC</strong>
-                    <span>PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB</span>
-                  </label>
-                  <input
-                    id="unit-rfc-formulir-input"
-                    ref="rfcFileInput"
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    @change="onRfcFileChange"
-                  />
-                </template>
-                <template v-else>
-                  <div class="rfc-file-preview">
-                    <Icons name="file-text" :size="28" />
-                    <div>
-                      <span class="rfc-file-name">{{ rfcFile.name }}</span>
-                      <span class="rfc-file-size">{{ (rfcFile.size / 1024).toFixed(1) }} KB</span>
-                    </div>
-                    <button type="button" class="rfc-remove-file-btn" @click="removeRfcFile" aria-label="Hapus file RFC">
-                      <Icons name="trash" :size="16" />
-                    </button>
-                  </div>
-                </template>
-              </div>
-            </div>
-
-            <div class="rfc-modal-actions">
-              <button type="button" class="btn btn-secondary" :disabled="saving" @click="previousStep">
-                <span aria-hidden="true">&larr;</span>
-                Kembali
-              </button>
-              <button type="submit" class="btn btn-primary" :disabled="saving || !rfcFile">
-                <Icons v-if="!saving" name="check" :size="14" />
-                {{ saving ? 'Mengirim...' : 'Kirim Pengajuan' }}
-              </button>
-            </div>
-          </template>
-        </form>
-      </div>
-    </dialog>
-  </UserLayout>
+        </template>
+      </form>
+    </Modal>
+  </div>
 </template>
 
 <style scoped>
@@ -539,8 +436,8 @@ function formatDate(value) {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 28px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -551,7 +448,8 @@ function formatDate(value) {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .uk-bc-link {
@@ -560,11 +458,12 @@ function formatDate(value) {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .uk-bc-link:hover {
@@ -577,31 +476,22 @@ function formatDate(value) {
 
 .uk-bc-current {
   color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
 }
 
 .uk-welcome-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .uk-welcome-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.75);
-  line-height: 1.5;
-}
-
-.btn-light-primary {
-  background: #fff;
-  color: #1e3a8a;
-  border: none;
-}
-
-.btn-light-primary:hover:not(:disabled) {
-  background: #eef4ff;
+  line-height: var(--idds-caption-line);
 }
 
 .stats-grid {
@@ -615,7 +505,7 @@ function formatDate(value) {
   position: relative;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
@@ -647,10 +537,11 @@ function formatDate(value) {
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #4b5563;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: var(--idds-weight-semibold);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-caption-line);
 }
 
 .stat-icon-wrap {
@@ -669,10 +560,10 @@ function formatDate(value) {
 .bg-indigo { background: #eef2ff; color: #4f46e5; }
 
 .stat-value {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h3-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
-  line-height: 1;
+  line-height: var(--idds-heading-h3-line);
 }
 
 .notice-card {
@@ -685,8 +576,9 @@ function formatDate(value) {
   border: 1px solid #fde68a;
   background: #fffbeb;
   color: #92400e;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-cell {
@@ -696,14 +588,16 @@ function formatDate(value) {
 }
 
 .app-name-main {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--notion-text);
+  font-weight: var(--idds-weight-semibold);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-sub {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .description-cell {
@@ -715,8 +609,9 @@ function formatDate(value) {
 
 .col-date {
   white-space: nowrap;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 
 .global-empty {
@@ -724,7 +619,7 @@ function formatDate(value) {
   padding: 72px 24px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border-radius: 8px;
   margin: 20px;
 }
 
@@ -733,24 +628,26 @@ function formatDate(value) {
   height: 64px;
   margin: 0 auto 20px;
   background: #f3f4f6;
-  border-radius: 16px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .global-empty-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--idds-body-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
   margin-bottom: 8px;
+  line-height: var(--idds-body-line);
 }
 
 .global-empty-text {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
   max-width: 360px;
   margin: 0 auto 24px;
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-form-modal {
@@ -771,7 +668,7 @@ function formatDate(value) {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--notion-text-tertiary);
+  color: var(--ina-content-tertiary);
   transition: all 0.3s ease;
   white-space: nowrap;
 }
@@ -780,22 +677,23 @@ function formatDate(value) {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--notion-bg-secondary);
-  border: 1px solid var(--notion-border);
+  background: var(--ina-background-secondary);
+  border: 1px solid var(--ina-stroke-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--idds-caption-size);
+  font-weight: var(--idds-weight-semibold);
   transition: all 0.3s ease;
+  line-height: var(--idds-caption-line);
 }
 
-.rfc-step.active { color: var(--notion-text); }
+.rfc-step.active { color: var(--ina-content-primary); }
 .rfc-step.done { color: #10b981; }
 
 .rfc-step.active span {
-  background: var(--notion-blue);
-  border-color: var(--notion-blue);
+  background: var(--ina-primary-primary);
+  border-color: var(--ina-primary-primary);
   color: #fff;
 }
 
@@ -808,7 +706,7 @@ function formatDate(value) {
 .rfc-step-line {
   flex: 1;
   height: 2px;
-  background: var(--notion-border);
+  background: var(--ina-stroke-primary);
   margin: 0 16px;
   border-radius: 2px;
   transition: all 0.3s ease;
@@ -817,8 +715,8 @@ function formatDate(value) {
 .rfc-step-line.active { background: #10b981; }
 
 .required-mark {
-  color: var(--notion-red);
-  font-weight: 800;
+  color: var(--ina-negative-600);
+  font-weight: var(--idds-weight-bold);
 }
 
 .rfc-modal-actions {
@@ -850,40 +748,42 @@ function formatDate(value) {
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: var(--notion-blue-bg, #eff6ff);
+  background: var(--ina-primary-50, #eff6ff);
   border: 1px solid rgba(59, 130, 246, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--notion-blue, #2563eb);
+  color: var(--ina-primary-primary, #2563eb);
 }
 
 .rfc-upload-copy h4 {
   margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--notion-text);
+  font-size: var(--idds-body-small-size);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-body-small-line);
 }
 
 .rfc-upload-copy p {
   margin: 0;
-  color: var(--notion-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  color: var(--ina-content-secondary);
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-template-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
 }
 
 .rfc-template-link {
-  font-size: 13px;
-  color: var(--notion-blue);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-primary-primary);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--idds-weight-semibold);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-template-link:hover {
@@ -891,9 +791,9 @@ function formatDate(value) {
 }
 
 .rfc-upload-area {
-  border: 2px dashed var(--notion-border);
+  border: 2px dashed var(--ina-stroke-primary);
   border-radius: 10px;
-  background: var(--notion-bg);
+  background: var(--ina-background-primary);
   min-height: auto;
   display: flex;
   align-items: center;
@@ -902,8 +802,8 @@ function formatDate(value) {
 }
 
 .rfc-upload-area:hover {
-  border-color: var(--notion-blue);
-  background: var(--notion-blue-bg, #eff6ff);
+  border-color: var(--ina-primary-primary);
+  background: var(--ina-primary-50, #eff6ff);
 }
 
 .rfc-upload-area.has-file {
@@ -922,17 +822,19 @@ function formatDate(value) {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  color: var(--notion-text-secondary);
+  color: var(--ina-content-secondary);
   text-align: center;
 }
 
 .rfc-upload-label strong {
-  color: var(--notion-blue-dark);
-  font-size: 15px;
+  color: var(--ina-primary-700);
+  font-size: var(--idds-body-small-size);
+  line-height: var(--idds-body-small-line);
 }
 
 .rfc-upload-label span {
-  font-size: 13px;
+  font-size: var(--idds-caption-size);
+  line-height: var(--idds-caption-line);
 }
 
 .rfc-upload-area input[type='file'] {
@@ -946,7 +848,7 @@ function formatDate(value) {
   align-items: center;
   gap: 12px;
   padding: 20px;
-  color: var(--notion-blue-dark);
+  color: var(--ina-primary-700);
 }
 
 .rfc-file-name,
@@ -955,14 +857,15 @@ function formatDate(value) {
 }
 
 .rfc-file-name {
-  font-weight: 800;
-  color: var(--notion-text);
+  font-weight: var(--idds-weight-bold);
+  color: var(--ina-content-primary);
 }
 
 .rfc-file-size {
   margin-top: 3px;
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .rfc-remove-file-btn {
@@ -985,11 +888,6 @@ function formatDate(value) {
     margin: 0 12px 20px;
   }
 
-  .btn-light-primary {
-    width: 100%;
-    justify-content: center;
-  }
-
   .stats-grid {
     grid-template-columns: 1fr;
     margin: 12px 12px 16px;
@@ -1002,11 +900,6 @@ function formatDate(value) {
   .uk-card-head {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .uk-card-head .search-group {
-    max-width: 100%;
-    width: 100%;
   }
 
   .rfc-modal-actions {

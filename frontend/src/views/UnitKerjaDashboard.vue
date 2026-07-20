@@ -1,18 +1,24 @@
 <script setup>
+import { Button } from '@idds/vue'
+import { IconPlus } from '@tabler/icons-vue'
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import http from '../lib/http'
-import UserLayout from '../layouts/UserLayout.vue'
 import AplikasiFormModal from '../components/AplikasiFormModal.vue'
-import DataCardHead from '../components/DataCardHead.vue'
+import ConfirmationDrawer from '../components/ConfirmationDrawer.vue'
 import DataTable from '../components/DataTable.vue'
-import Icons from '../components/Icons.vue'
+import IconActionButton from '../components/IconActionButton.vue'
+import IconActionCell from '../components/IconActionCell.vue'
+import AsyncState from '../components/AsyncState.vue'
+import MetricCard from '../components/MetricCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import PaginationBar from '../components/PaginationBar.vue'
+import SearchField from '../components/SearchField.vue'
+import StatusBadge from '../components/StatusBadge.vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
-import { getHomeByRole } from '../constants/roles'
-import { usePagination } from '../composables/usePagination.js'
 import { warnDev } from '../utils/logger'
-import { getStatusBadgeClass, getStatusLabel, getStatusTooltip } from '../constants/status'
+import { getShortStatusLabel, getStatusBadgeClass, getStatusTooltip } from '../constants/status'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -20,34 +26,33 @@ const toast = useToastStore()
 
 const apps = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const searchAplikasi = ref('')
 const showAppModal = ref(false)
 const withdrawing = ref(false)
 const confirmWithdrawApp = ref(null)
 let searchTimer = null
 
-const basePath = computed(() => getHomeByRole(auth.role).path)
 const hasActiveSearch = computed(() => !!searchAplikasi.value?.trim())
+
+function handleWithdrawModalChange(open) {
+  if (!open) cancelWithdraw()
+}
 
 const appsPagination = ref({
   currentPage: 1,
   lastPage: 1,
-  perPage: 10,
+  perPage: 30,
   total: 0,
 })
 
-const { pageNumbers: appPageNumbers } = usePagination(appsPagination)
-
-// Stat cards data
-const stats = computed(() => {
-  const total = appsPagination.value.total
-  const aktif = apps.value.filter(a => a.status === 'deployed_production').length
-  const proses = apps.value.filter(a =>
-    ['diajukan', 'perlu_perbaikan_pengajuan', 'terverifikasi', 'layak', 'analisa_desain', 'pengembangan', 'uat', 'perbaikan_uat', 'uji_keamanan', 'perbaikan_keamanan', 'siap_deploy', 'deployed_staging'].includes(a.status)
-  ).length
-  const nonaktif = apps.value.filter(a => a.status === 'nonaktif').length
-  return { total, aktif, proses, nonaktif }
-})
+const statsData = ref({ development: 0, operational: 0, inactive: 0, stopped: 0 })
+const stats = computed(() => ({
+  total: Object.values(statsData.value).reduce((total, value) => total + Number(value || 0), 0),
+  aktif: statsData.value.operational,
+  proses: statsData.value.development,
+  nonaktif: statsData.value.inactive,
+}))
 
 // Greeting berdasarkan waktu
 const greeting = computed(() => {
@@ -58,7 +63,7 @@ const greeting = computed(() => {
 })
 
 onMounted(async () => {
-  await loadAplikasiData()
+  await Promise.all([loadAplikasiData(), loadStats()])
 })
 
 onBeforeUnmount(() => {
@@ -69,6 +74,7 @@ onBeforeUnmount(() => {
 
 async function loadAplikasiData(page = 1) {
   loading.value = true
+  loadError.value = ''
   try {
     const searchQuery = searchAplikasi.value?.trim()
       ? `q=${encodeURIComponent(searchAplikasi.value.trim())}&`
@@ -83,7 +89,7 @@ async function loadAplikasiData(page = 1) {
       appsPagination.value = {
         currentPage: Number(meta.current_page) || page,
         lastPage: Number(meta.last_page) || 1,
-        perPage: Number(meta.per_page) || appsPagination.value.perPage || 10,
+        perPage: Number(meta.per_page) || appsPagination.value.perPage || 30,
         total: Number(meta.total) || 0,
       }
     } else {
@@ -92,9 +98,23 @@ async function loadAplikasiData(page = 1) {
     }
   } catch (error) {
     warnDev('[UnitKerjaDashboard] loadAplikasiData error:', error)
-    toast.push('Tidak dapat memuat daftar pengajuan.', 'error', 4000)
+    loadError.value = error.response?.data?.message || 'Daftar pengajuan belum dapat dimuat.'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadStats() {
+  try {
+    const response = await http.get('/aplikasi/stats')
+    statsData.value = {
+      development: Number(response.data?.data?.development) || 0,
+      operational: Number(response.data?.data?.operational) || 0,
+      inactive: Number(response.data?.data?.inactive) || 0,
+      stopped: Number(response.data?.data?.stopped) || 0,
+    }
+  } catch (error) {
+    warnDev('[UnitKerjaDashboard] loadStats error:', error)
   }
 }
 
@@ -108,7 +128,10 @@ function closeAppModal() {
 
 async function onAppSaved() {
   showAppModal.value = false
-  await loadAplikasiData(appsPagination.value.currentPage)
+  await Promise.all([
+    loadAplikasiData(appsPagination.value.currentPage),
+    loadStats(),
+  ])
 }
 
 function clearSearch() {
@@ -144,7 +167,10 @@ async function doWithdraw() {
     await http.delete(`/aplikasi/${confirmWithdrawApp.value.id}/withdraw`)
     toast.push('Pengajuan berhasil ditarik.', 'success')
     confirmWithdrawApp.value = null
-    await loadAplikasiData(appsPagination.value.currentPage)
+    await Promise.all([
+      loadAplikasiData(appsPagination.value.currentPage),
+      loadStats(),
+    ])
   } catch (error) {
     const msg = error.response?.data?.message || 'Gagal menarik pengajuan.'
     toast.push(msg, 'error')
@@ -183,252 +209,145 @@ function getNextActionClass(app) {
   return ''
 }
 
+function statusToneClass(status) {
+  const badgeClass = getStatusBadgeClass(status)
+  if (badgeClass.includes('success')) return 'success'
+  if (badgeClass.includes('danger')) return 'danger'
+  if (badgeClass.includes('warning')) return 'warning'
+  return ''
+}
+
 </script>
 
 <template>
-  <UserLayout>
-    <div class="container uk-dashboard">
-      <!-- Welcome header card (breadcrumb terintegrasi) -->
-      <div class="uk-welcome-card">
-        <div class="uk-welcome-text">
-          <nav class="uk-welcome-breadcrumb" aria-label="breadcrumb">
-            <button type="button" @click="router.push(basePath)" class="uk-bc-link">
-              <Icons name="dashboard" :size="12" />
-              Dashboard
-            </button>
-            <span class="uk-bc-sep">/</span>
-            <span class="uk-bc-current">Pengajuan & UAT</span>
-          </nav>
-          <h2 class="uk-welcome-title">{{ greeting }}, {{ auth.user?.name?.split(' ')[0] || 'User' }}</h2>
-          <p class="uk-welcome-sub">Pantau pengajuan aplikasi dan tindak lanjuti UAT yang sudah siap diuji.</p>
-        </div>
-      </div>
+  <div class="ui-page">
+    <PageHeader
+      eyebrow="Unit Kerja"
+      :title="`${greeting}, ${auth.user?.name?.split(' ')[0] || 'Pengguna'}`"
+      description="Pantau pengajuan aplikasi dan tindak lanjuti UAT yang siap diuji."
+    >
+      <template #actions>
+        <Button hierarchy="primary" size="lg" :prefix-icon="IconPlus" @click="openAddModal">
+          Ajukan aplikasi
+        </Button>
+      </template>
+    </PageHeader>
 
-      <!-- Stat cards (Modern Enterprise Style) -->
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <div class="stat-header">
-            <span class="stat-label">Total Item</span>
-            <div class="stat-icon-wrap bg-blue">
-              <Icons name="file" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.total }}</div>
-        </div>
-        <div class="stat-card production">
-          <div class="stat-header">
-            <span class="stat-label">Aktif / Deployed</span>
-            <div class="stat-icon-wrap bg-green">
-              <Icons name="check-circle" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.aktif }}</div>
-        </div>
-        <div class="stat-card dev">
-          <div class="stat-header">
-            <span class="stat-label">Dalam Proses</span>
-            <div class="stat-icon-wrap bg-amber">
-              <Icons name="code" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.proses }}</div>
-        </div>
-        <div class="stat-card maintenance">
-          <div class="stat-header">
-            <span class="stat-label">Nonaktif</span>
-            <div class="stat-icon-wrap bg-red">
-              <Icons name="alert-circle" :size="18" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stats.nonaktif }}</div>
-        </div>
-      </div>
+    <div class="ui-page-content">
+      <section class="ui-metric-grid" aria-label="Ringkasan pengajuan">
+        <MetricCard label="Total pengajuan" :value="stats.total" icon="file" tone="blue" />
+        <MetricCard label="Operasional" :value="stats.aktif" icon="check-circle" tone="green" />
+        <MetricCard label="Dalam proses" :value="stats.proses" icon="code" tone="amber" />
+        <MetricCard label="Nonaktif" :value="stats.nonaktif" icon="alert-circle" tone="red" />
+      </section>
 
-      <!-- Main table card -->
-      <div class="content-section active">
-        <div class="card uk-card">
-          <DataCardHead title="Pengajuan & Tindak Lanjut UAT">
-            <template #actions>
-              <div class="search-group">
-                <span class="search-icon">
-                  <Icons name="search" :size="16" />
-                </span>
-                <input
-                  type="search"
-                  v-model="searchAplikasi"
-                  @input="scheduleSearch"
-                  placeholder="Cari aplikasi..."
-                  maxlength="50"
-                  aria-label="Cari pengajuan"
-                />
-              </div>
-              <button
-                class="btn btn-primary"
-                type="button"
-                @click="openAddModal"
-              >
-                <Icons name="plus" :size="16" />
-                Ajukan Baru
-              </button>
-            </template>
-          </DataCardHead>
-
-          <div v-if="loading" class="loading-state">
-            <div class="loading-spinner"></div>
-            <p>Memuat data...</p>
+      <section class="ui-panel" aria-labelledby="submission-list-title">
+        <header class="ui-panel-header">
+          <h2 id="submission-list-title">Pengajuan dan tindak lanjut UAT</h2>
+          <div class="ui-panel-actions">
+            <SearchField
+              v-model="searchAplikasi"
+              label="Cari pengajuan"
+              placeholder="Cari aplikasi"
+              @update:model-value="scheduleSearch"
+            />
           </div>
+        </header>
 
-          <div v-else-if="apps.length === 0 && hasActiveSearch" class="global-empty">
-            <p class="global-empty-title">Tidak ada hasil pencarian</p>
-            <p class="global-empty-text">
-              Tidak ada pengajuan atau UAT yang cocok dengan kata kunci ini. Coba istilah lain atau kosongkan pencarian.
-            </p>
-            <button type="button" class="btn btn-ghost" @click="clearSearch">
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :empty="apps.length === 0"
+          :empty-icon="hasActiveSearch ? 'search' : 'folder-plus'"
+          :empty-title="hasActiveSearch ? 'Pengajuan tidak ditemukan' : 'Belum ada pengajuan'"
+          :empty-description="hasActiveSearch
+            ? 'Coba kata kunci lain atau hapus pencarian.'
+            : 'Pengajuan aplikasi baru Anda akan tampil di sini.'"
+          @retry="loadAplikasiData(appsPagination.currentPage)"
+        >
+          <template v-if="hasActiveSearch" #action>
+            <Button hierarchy="secondary" size="sm" @click="clearSearch">
               Hapus pencarian
-            </button>
-          </div>
+            </Button>
+          </template>
 
-          <div v-else-if="apps.length === 0" class="global-empty">
-            <div class="global-empty-icon-wrapper">
-              <Icons name="folder-plus" :size="48" class="global-empty-icon" />
-            </div>
-            <h3 class="global-empty-title">Belum Ada Pengajuan atau UAT</h3>
-            <p class="global-empty-text">
-              Belum ada pengajuan aplikasi atau aplikasi yang perlu diuji UAT.
-              Mulai langkah pertama dengan mendaftarkan aplikasi Unit Kerja Anda.
-            </p>
-            <button class="btn btn-primary" @click="openAddModal">
-              <Icons name="plus" :size="16" />
-              Buat Pengajuan Baru
-            </button>
-          </div>
-
-          <template v-else>
             <DataTable>
                 <thead>
                   <tr>
                     <th scope="col" class="col-num">#</th>
-                    <th scope="col">Nama Aplikasi</th>
+                    <th scope="col">Nama aplikasi</th>
                     <th scope="col">Status</th>
-                    <th scope="col">Tanggal Pengajuan</th>
-                    <th scope="col" class="col-aksi">Aksi</th>
+                    <th scope="col">Tanggal pengajuan</th>
+                    <th scope="col" class="ui-table-actions"><span class="sr-only">Aksi</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(app, idx) in apps" :key="app.id" @click="viewDetail(app.id)" class="data-table-row is-clickable">
-                    <td class="col-num">{{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + idx + 1 }}</td>
-                    <td>
-                      <div class="app-name-cell">
-                        <span class="app-name-main">{{ app.nama_aplikasi }}</span>
-                        <span class="app-name-sub">{{ app.nama_layanan }}</span>
-                      </div>
+                  <tr v-for="(app, idx) in apps" :key="app.id">
+                    <td data-label="Nomor" data-hide-mobile="true" class="col-num">
+                      {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + idx + 1 }}
                     </td>
-                    <td>
+                    <td data-primary="true">
+                      <RouterLink
+                        class="ui-table-link"
+                        :to="{ name: 'unit-kerja-app-detail', params: { id: app.id } }"
+                      >
+                        {{ app.nama_aplikasi }}
+                      </RouterLink>
+                      <span class="ui-table-subtitle">{{ app.nama_layanan }}</span>
+                    </td>
+                    <td data-label="Status">
                       <div class="status-cell">
-                        <span :class="['badge', getStatusBadgeClass(app.status)]" :title="getStatusTooltip(app.status)">
-                          {{ getStatusLabel(app.status) }}
-                        </span>
+                        <StatusBadge :tone="statusToneClass(app.status)" :title="getStatusTooltip(app.status)">
+                          {{ getShortStatusLabel(app.status) }}
+                        </StatusBadge>
                         <div v-if="getNextActionText(app)" :class="['next-action-text', getNextActionClass(app)]">
                           {{ getNextActionText(app) }}
                         </div>
                       </div>
                     </td>
-                    <td class="col-date">{{ app.created_at ? new Date(app.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-' }}</td>
-                    <td @click.stop>
-                      <div class="action-group">
-                        <button
-                          class="action-btn table-action-btn view-btn"
-                          type="button"
-                          title="Lihat progres"
-                          @click.stop="viewDetail(app.id)"
-                        >
-                          <Icons name="eye" :size="14" />
-                          Lihat Progres
-                        </button>
-                        <button
+                    <td data-label="Diajukan" class="col-date">
+                      {{ app.created_at ? new Date(app.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-' }}
+                    </td>
+                    <td class="ui-table-actions">
+                      <IconActionCell :label="`Aksi untuk ${app.nama_aplikasi}`">
+                        <IconActionButton label="Lihat progres" icon="eye" @click="viewDetail(app.id)" />
+                        <IconActionButton
                           v-if="app.status === 'diajukan'"
-                          class="action-btn table-action-btn withdraw-btn"
-                          type="button"
-                          title="Tarik pengajuan"
-                          @click.stop="askWithdraw(app)"
-                        >
-                          <Icons name="trash" :size="14" />
-                          Tarik
-                        </button>
-                      </div>
+                          label="Tarik pengajuan"
+                          icon="trash"
+                          tone="danger"
+                          @click="askWithdraw(app)"
+                        />
+                      </IconActionCell>
                     </td>
                   </tr>
                 </tbody>
             </DataTable>
+        </AsyncState>
 
-            <div v-if="appsPagination.lastPage > 1" class="pagination">
-              <div class="pagination-info">
-                Menampilkan {{ ((appsPagination.currentPage - 1) * appsPagination.perPage) + 1 }} -
-                {{ Math.min(appsPagination.currentPage * appsPagination.perPage, appsPagination.total) }}
-                dari {{ appsPagination.total }} item
-              </div>
-              <div class="pagination-controls">
-                <button
-                  type="button"
-                  @click="changePage(appsPagination.currentPage - 1)"
-                  :disabled="appsPagination.currentPage === 1"
-                  class="pagination-btn"
-                >
-                  <Icons name="chevron-left" :size="16" />
-                </button>
-
-                <button
-                  v-for="page in appPageNumbers"
-                  :key="page"
-                  type="button"
-                  @click="page !== '...' && changePage(page)"
-                  :class="['pagination-btn', { active: page === appsPagination.currentPage, disabled: page === '...' }]"
-                >
-                  {{ page }}
-                </button>
-
-                <button
-                  type="button"
-                  @click="changePage(appsPagination.currentPage + 1)"
-                  :disabled="appsPagination.currentPage === appsPagination.lastPage"
-                  class="pagination-btn"
-                >
-                  <Icons name="chevron-right" :size="16" />
-                </button>
-              </div>
-            </div>
-          </template>
-        </div>
-      </div>
+        <PaginationBar
+          :page="appsPagination.currentPage"
+          :last-page="appsPagination.lastPage"
+          :total="appsPagination.total"
+          @change="changePage"
+        />
+      </section>
     </div>
 
     <AplikasiFormModal :show="showAppModal" :app="null" @close="closeAppModal" @saved="onAppSaved" />
 
-    <!-- Modal konfirmasi tarik pengajuan -->
-    <div v-if="confirmWithdrawApp" class="modal active" @click.self="cancelWithdraw">
-      <div class="modal-content withdraw-confirm-modal">
-        <div class="modal-header">
-          <h3>Tarik Pengajuan</h3>
-          <button class="close-btn" @click="cancelWithdraw">&times;</button>
-        </div>
-        <div class="withdraw-confirm-body">
-          <p class="withdraw-confirm-text">
-            Pengajuan <strong>{{ confirmWithdrawApp.nama_aplikasi }}</strong> akan ditarik dan tidak lagi tampil sebagai pengajuan aktif.
-          </p>
-          <p class="withdraw-confirm-note">Lanjutkan hanya jika Anda memang ingin membatalkan pengajuan ini.</p>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-cancel" :disabled="withdrawing" @click="cancelWithdraw">
-            Batal
-          </button>
-          <button type="button" class="btn btn-danger" :disabled="withdrawing" @click="doWithdraw">
-            <span v-if="withdrawing">Menarik...</span>
-            <span v-else>Tarik Pengajuan</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </UserLayout>
+    <ConfirmationDrawer
+      :model-value="!!confirmWithdrawApp"
+      title="Tarik pengajuan"
+      description="Pengajuan akan dibatalkan dan tidak lagi tampil sebagai pengajuan aktif."
+      :subject="confirmWithdrawApp?.nama_aplikasi || 'Pengajuan aplikasi'"
+      confirm-label="Tarik pengajuan"
+      :loading="withdrawing"
+      @update:model-value="handleWithdrawModalChange"
+      @confirm="doWithdraw"
+      @cancel="cancelWithdraw"
+    />
+  </div>
 </template>
 
 <style scoped>
@@ -439,8 +358,8 @@ function getNextActionClass(app) {
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, #1e3a8a 0%, #2c4fa8 100%);
-  border-radius: 14px;
+  background: var(--ina-background-primary);
+  border-radius: 8px;
   padding: 24px 28px;
   margin: 0 20px 28px;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
@@ -452,7 +371,8 @@ function getNextActionClass(app) {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
+  line-height: var(--idds-caption-small-line);
 }
 
 .uk-bc-link {
@@ -461,11 +381,12 @@ function getNextActionClass(app) {
   color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--idds-caption-small-size);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   transition: color 0.15s;
+  line-height: var(--idds-caption-small-line);
 }
 
 .uk-bc-link:hover {
@@ -478,33 +399,35 @@ function getNextActionClass(app) {
 
 .uk-bc-current {
   color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
+  font-weight: var(--idds-weight-medium);
 }
 
 .uk-welcome-title {
   margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--idds-body-large-size);
+  font-weight: var(--idds-weight-bold);
   color: #fff;
+  line-height: var(--idds-body-large-line);
 }
 
 .uk-welcome-sub {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: rgba(255, 255, 255, 0.75);
-  line-height: 1.5;
+  line-height: var(--idds-caption-line);
 }
 
 .uk-welcome-btn {
   flex-shrink: 0;
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   border-radius: 8px;
   background: #fff;
   color: #1e3a8a;
-  font-weight: 600;
+  font-weight: var(--idds-weight-semibold);
   border: none;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  line-height: var(--idds-caption-line);
 }
 
 .uk-welcome-btn:hover {
@@ -523,7 +446,7 @@ function getNextActionClass(app) {
   position: relative;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
@@ -559,10 +482,11 @@ function getNextActionClass(app) {
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #4b5563;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: var(--idds-weight-semibold);
+  letter-spacing: var(--idds-letter-spacing);
+  line-height: var(--idds-caption-line);
 }
 
 .stat-icon-wrap {
@@ -581,17 +505,18 @@ function getNextActionClass(app) {
 .bg-red { background: #fef2f2; color: #ef4444; }
 
 .stat-value {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: var(--idds-heading-h3-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
-  line-height: 1;
-  letter-spacing: -0.02em;
+  line-height: var(--idds-heading-h3-line);
+  letter-spacing: var(--idds-letter-spacing);
 }
 
 .col-date {
   white-space: nowrap;
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-cell {
@@ -601,14 +526,16 @@ function getNextActionClass(app) {
 }
 
 .app-name-main {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--notion-text);
+  font-weight: var(--idds-weight-semibold);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
 }
 
 .app-name-sub {
-  font-size: 12px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-small-size);
+  color: var(--ina-content-secondary);
+  line-height: var(--idds-caption-small-line);
 }
 
 .status-cell {
@@ -624,7 +551,7 @@ function getNextActionClass(app) {
   padding: 80px 24px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border-radius: 8px;
   margin: 20px;
 }
 
@@ -633,33 +560,28 @@ function getNextActionClass(app) {
   height: 64px;
   margin: 0 auto 20px;
   background: #f3f4f6;
-  border-radius: 16px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: var(--idds-heading-h3-size);
+  line-height: var(--idds-heading-h3-line);
 }
 
 .global-empty-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--idds-body-size);
+  font-weight: var(--idds-weight-bold);
   color: #111827;
   margin-bottom: 8px;
+  line-height: var(--idds-body-line);
 }
 
 .global-empty-text {
-  font-size: 14px;
+  font-size: var(--idds-caption-size);
   color: #6b7280;
   max-width: 320px;
   margin: 0 auto 24px;
-}
-
-/* ===== WITHDRAW ===== */
-.action-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  line-height: var(--idds-caption-line);
 }
 
 .withdraw-btn {
@@ -698,16 +620,17 @@ function getNextActionClass(app) {
 }
 
 .withdraw-confirm-text {
-  font-size: 14px;
-  color: var(--notion-text);
-  line-height: 1.6;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-primary);
+  line-height: var(--idds-caption-line);
   margin: 0 0 8px;
 }
 
 .withdraw-confirm-note {
-  font-size: 13px;
-  color: var(--notion-text-secondary);
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-secondary);
   margin: 0;
+  line-height: var(--idds-caption-line);
 }
 
 /* ===== RESPONSIVE ===== */
@@ -721,11 +644,13 @@ function getNextActionClass(app) {
   }
 
   .stat-value {
-    font-size: 28px;
+    font-size: var(--idds-heading-h4-size);
+    line-height: var(--idds-heading-h4-line);
   }
 
   .stat-label {
-    font-size: 13px;
+    font-size: var(--idds-caption-size);
+    line-height: var(--idds-caption-line);
   }
 
   .uk-welcome-card {
@@ -743,23 +668,20 @@ function getNextActionClass(app) {
     align-items: flex-start;
   }
 
-  .uk-card-head .search-group {
-    max-width: 100%;
-    width: 100%;
-  }
 }
 
 @media (max-width: 480px) {
   .uk-welcome-title {
-    font-size: 18px;
+    font-size: var(--idds-body-size);
+    line-height: var(--idds-body-line);
   }
 }
 
 .next-action-text {
-  font-size: 11px;
+  font-size: var(--idds-caption-small-size);
   color: #d97706;
-  font-weight: 500;
-  line-height: 1.2;
+  font-weight: var(--idds-weight-medium);
+  line-height: var(--idds-caption-small-line);
 }
 
 .next-action-text.is-waiting {
