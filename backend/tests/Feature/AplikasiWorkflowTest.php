@@ -202,6 +202,7 @@ class AplikasiWorkflowTest extends TestCase
     public function test_pengajuan_cannot_be_approved_without_formulir_pengajuan(): void
     {
         $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $analis = User::factory()->create(['role' => 'analis_desain']);
         $token = $pengelola->createToken('t')->plainTextToken;
         $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_DIAJUKAN]);
 
@@ -221,6 +222,79 @@ class AplikasiWorkflowTest extends TestCase
             ])
             ->assertStatus(200)
             ->assertJsonPath('data.status', Aplikasi::STATUS_TERVERIFIKASI);
+
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $analis->id,
+            'aplikasi_id' => $aplikasi->id,
+            'type' => 'action_required',
+            'title' => 'Analisis Desain Diperlukan',
+        ]);
+    }
+
+    public function test_analis_must_start_analysis_before_deciding_feasibility(): void
+    {
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $analis = User::factory()->create(['role' => 'analis_desain']);
+        $implementer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);
+        $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_TERVERIFIKASI]);
+
+        $pengelolaToken = $pengelola->createToken('pengelola')->plainTextToken;
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$pengelolaToken)
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/mulai-analisa-desain")
+            ->assertStatus(403);
+
+        $this->app['auth']->forgetGuards();
+        $analisToken = $analis->createToken('analis')->plainTextToken;
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$analisToken)
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/studi-kelayakan", [
+                'is_layak' => true,
+                'catatan' => 'Mencoba menetapkan kelayakan sebelum analisis dimulai.',
+            ])
+            ->assertStatus(400);
+
+        $this->assertDatabaseHas('aplikasis', [
+            'id' => $aplikasi->id,
+            'status' => Aplikasi::STATUS_TERVERIFIKASI,
+        ]);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$analisToken)
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/mulai-analisa-desain")
+            ->assertOk()
+            ->assertJsonPath('data.status', Aplikasi::STATUS_ANALISA_DESAIN);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$analisToken)
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/studi-kelayakan", [
+                'is_layak' => true,
+                'catatan' => 'Analisis selesai tetapi laporan belum diunggah.',
+            ])
+            ->assertStatus(422);
+
+        $this->createActiveDocument($aplikasi, AplikasiJenisDokumen::LaporanAnalisaDesain, $analis);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$analisToken)
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/studi-kelayakan", [
+                'is_layak' => true,
+                'catatan' => 'Hasil analisis menunjukkan aplikasi layak dikembangkan.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', Aplikasi::STATUS_LAYAK);
+
+        $this->assertDatabaseHas('aplikasi_status_histories', [
+            'aplikasi_id' => $aplikasi->id,
+            'aksi' => 'Studi Kelayakan',
+            'status_sebelumnya' => Aplikasi::STATUS_ANALISA_DESAIN,
+            'status_baru' => Aplikasi::STATUS_LAYAK,
+            'changed_by' => $analis->id,
+        ]);
+        $this->assertDatabaseHas('app_notifications', [
+            'user_id' => $implementer->id,
+            'aplikasi_id' => $aplikasi->id,
+            'type' => 'action_required',
+            'title' => 'Aplikasi Siap Dikembangkan',
+        ]);
     }
 
     public function test_unit_kerja_cannot_resubmit_other_users_correction(): void
@@ -244,7 +318,7 @@ class AplikasiWorkflowTest extends TestCase
     {
         $implementer = User::factory()->create(['role' => 'tim_implementasi_aplikasi']);
         $token = $implementer->createToken('t')->plainTextToken;
-        $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_ANALISA_DESAIN]);
+        $aplikasi = Aplikasi::factory()->create(['status' => Aplikasi::STATUS_LAYAK]);
 
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$token)
             ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/mulai-pengembangan", [

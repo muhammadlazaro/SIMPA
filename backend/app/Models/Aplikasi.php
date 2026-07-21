@@ -169,23 +169,22 @@ class Aplikasi extends Model
                     ],
                 ],
 
-                // Layak → analis harus mulai analisa
-                self::STATUS_LAYAK => [
+                // Pengelola menyerahkan pengajuan terverifikasi kepada Analis Desain.
+                self::STATUS_TERVERIFIKASI => [
                     [
                         'role'  => 'analis_desain',
                         'type'  => 'action_required',
-                        'title' => 'Analisa Desain Diperlukan',
-                        'body'  => 'Aplikasi "%s" dinyatakan layak. Silakan mulai proses analisa desain.',
+                        'title' => 'Analisis Desain Diperlukan',
+                        'body'  => 'Pengajuan aplikasi "%s" telah diverifikasi. Silakan mulai proses analisis desain.',
                     ],
                 ],
 
-                // Analisa desain → tim implementasi harus siap
-                self::STATUS_ANALISA_DESAIN => [
+                self::STATUS_LAYAK => [
                     [
                         'role'  => 'tim_implementasi_aplikasi',
                         'type'  => 'action_required',
                         'title' => 'Aplikasi Siap Dikembangkan',
-                        'body'  => 'Analisa desain untuk aplikasi "%s" telah selesai. Silakan mulai pengembangan.',
+                        'body'  => 'Analisis desain aplikasi "%s" telah selesai dan dinyatakan layak. Silakan mulai pengembangan.',
                     ],
                 ],
 
@@ -343,12 +342,12 @@ class Aplikasi extends Model
                     self::STATUS_TERVERIFIKASI => [
                         'type'  => 'info',
                         'title' => 'Pengajuan Terverifikasi',
-                        'body'  => 'Pengajuan aplikasi "%s" telah diverifikasi dan akan segera dievaluasi kelayakannya.',
+                        'body'  => 'Pengajuan aplikasi "%s" telah diverifikasi dan akan memasuki proses analisis desain.',
                     ],
                     self::STATUS_LAYAK => [
                         'type'  => 'info',
                         'title' => 'Aplikasi Dinyatakan Layak',
-                        'body'  => 'Aplikasi "%s" dinyatakan layak dan akan memasuki tahap analisa desain.',
+                        'body'  => 'Analisis desain aplikasi "%s" telah selesai, dinyatakan layak, dan akan memasuki tahap pengembangan.',
                     ],
                     self::STATUS_TIDAK_LAYAK => [
                         'type'  => 'info',

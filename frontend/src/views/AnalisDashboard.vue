@@ -57,7 +57,7 @@ async function loadAplikasiData(page = 1) {
   loadError.value = ''
   try {
     const searchQuery = searchAplikasi.value?.trim() ? `q=${encodeURIComponent(searchAplikasi.value.trim())}&` : ''
-    const statusFilter = `status=${encodeURIComponent('layak,analisa_desain')}&`
+    const statusFilter = `status=${encodeURIComponent('terverifikasi,analisa_desain')}&`
     const response = await http.get(`/aplikasi?${searchQuery}${statusFilter}per_page=${appsPagination.value.perPage}&page=${page}`)
     
     if (response.data.data) {
@@ -154,15 +154,15 @@ function onAnalisaSaved() {
   <div class="ui-page">
     <PageHeader
       eyebrow="Analis Desain"
-      title="Antrian analisis"
-      description="Tinjau aplikasi yang telah dinyatakan layak dan lengkapi rancangan teknisnya."
+      title="Antrian analisis dan kelayakan"
+      description="Mulai analisis desain untuk pengajuan terverifikasi, lengkapi rancangan teknisnya, lalu tetapkan kelayakan aplikasi."
     />
 
     <div class="ui-page-content">
       <section class="ui-panel" aria-labelledby="analysis-list-title">
         <header class="ui-panel-header">
           <div>
-            <h2 id="analysis-list-title">Aplikasi siap dianalisis</h2>
+            <h2 id="analysis-list-title">Aplikasi menunggu analisis</h2>
             <p class="ui-table-subtitle">{{ appsPagination.total }} aplikasi dalam antrian</p>
           </div>
           <div class="ui-panel-actions">
@@ -183,7 +183,7 @@ function onAnalisaSaved() {
           :empty-title="hasActiveSearch ? 'Aplikasi tidak ditemukan' : 'Antrian analisis kosong'"
           :empty-description="hasActiveSearch
             ? 'Coba kata kunci lain atau hapus pencarian.'
-            : 'Belum ada aplikasi yang siap masuk tahap analisis desain.'"
+            : 'Belum ada aplikasi yang menunggu analisis desain atau keputusan kelayakan.'"
           @retry="loadAplikasiData(appsPagination.currentPage)"
         >
           <template v-if="hasActiveSearch" #action>
@@ -223,7 +223,12 @@ function onAnalisaSaved() {
                 <td class="ui-table-actions">
                   <IconActionCell :label="`Aksi untuk ${app.nama_aplikasi}`">
                     <IconActionButton label="Lihat detail" icon="eye" @click="viewDetail(app.id)" />
-                    <IconActionButton label="Edit analisis" icon="edit" @click="openAnalisaEdit(app)" />
+                    <IconActionButton
+                      v-if="app.status === 'analisa_desain'"
+                      label="Edit analisis"
+                      icon="edit"
+                      @click="openAnalisaEdit(app)"
+                    />
                   </IconActionCell>
                 </td>
               </tr>

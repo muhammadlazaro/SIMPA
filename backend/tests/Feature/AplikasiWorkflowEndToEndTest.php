@@ -103,7 +103,12 @@ class AplikasiWorkflowEndToEndTest extends TestCase
             ])
             ->assertOk();
 
-        $this->asRole('pengelola_aplikasi')
+        $this->asRole('analis_desain')
+            ->postJson("/api/aplikasi/{$correctionApp->id}/workflow/mulai-analisa-desain")
+            ->assertOk()
+            ->assertJsonPath('data.status', Aplikasi::STATUS_ANALISA_DESAIN);
+
+        $this->asRole('analis_desain')
             ->postJson("/api/aplikasi/{$correctionApp->id}/workflow/studi-kelayakan", [
                 'is_layak' => false,
                 'catatan' => 'Belum memenuhi prioritas dan kapasitas layanan.',
@@ -164,12 +169,6 @@ class AplikasiWorkflowEndToEndTest extends TestCase
                 'catatan' => 'Formulir lengkap dan identitas layanan valid.',
             ])->assertOk();
 
-        $this->asRole('pengelola_aplikasi')
-            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/studi-kelayakan", [
-                'is_layak' => true,
-                'catatan' => 'Layak dilanjutkan ke analisis desain.',
-            ])->assertOk();
-
         $this->asRole('analis_desain')
             ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/mulai-analisa-desain")
             ->assertOk()
@@ -177,6 +176,14 @@ class AplikasiWorkflowEndToEndTest extends TestCase
 
         $this->uploadDocument('analis_desain', $aplikasi, 'laporan_analisa_desain', 'laporan-analisis-v1.pdf')
             ->assertCreated();
+
+        $this->asRole('analis_desain')
+            ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/studi-kelayakan", [
+                'is_layak' => true,
+                'catatan' => 'Hasil analisis menunjukkan aplikasi layak dikembangkan.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', Aplikasi::STATUS_LAYAK);
 
         $this->asRole('tim_implementasi_aplikasi')
             ->postJson("/api/aplikasi/{$aplikasi->id}/workflow/mulai-pengembangan", [

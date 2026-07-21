@@ -203,14 +203,14 @@ const availableActions = computed(() => {
       { label: 'Minta Perbaikan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'perlu_perbaikan_pengajuan' }, btnClass: 'btn-warning', requiresNote: true },
       { label: 'Tolak Pengajuan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'ditolak' }, btnClass: 'btn-danger', requiresNote: true }
     )
-  } else if (role === 'pengelola_aplikasi' && status === 'terverifikasi') {
+  } else if (role === 'analis_desain' && status === 'terverifikasi') {
+    actions.push({ label: 'Mulai Analisis Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false })
+  } else if (role === 'analis_desain' && status === 'analisa_desain') {
     actions.push(
       { label: 'Nyatakan Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: true }, btnClass: 'btn-success', requiresNote: true },
       { label: 'Nyatakan Tidak Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: false }, btnClass: 'btn-danger', requiresNote: true }
     )
-  } else if (role === 'analis_desain' && status === 'layak') {
-    actions.push({ label: 'Mulai Analisis Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false })
-  } else if (role === 'tim_implementasi_aplikasi' && status === 'analisa_desain') {
+  } else if (role === 'tim_implementasi_aplikasi' && status === 'layak') {
     actions.push({ label: 'Mulai Pengembangan', endpoint: '/workflow/mulai-pengembangan', btnClass: 'btn-primary', requiresNote: true })
   } else if (role === 'tim_implementasi_aplikasi' && status === 'pengembangan') {
     actions.push({ label: 'Tandai Siap UAT', endpoint: '/workflow/siap-uat', btnClass: 'btn-success', requiresNote: true })
@@ -232,6 +232,90 @@ const availableActions = computed(() => {
   // DevOps: tombol deploy dipindah ke Status Deployment section (sequential flow)
 
   return actions
+})
+
+const workflowActionVisuals = {
+  'Perbaiki Pengajuan': {
+    src: '/illustrations/workflow-revision.png',
+    alt: 'Petugas memperbaiki dokumen pengajuan',
+    description: 'Perbarui pengajuan sesuai catatan pemeriksa sebelum dikirim kembali.',
+  },
+  'Setujui Pengajuan': {
+    src: '/illustrations/workflow-approve.png',
+    alt: 'Petugas menyetujui dokumen pengajuan',
+    description: 'Pastikan identitas dan dokumen pengajuan sudah lengkap sebelum diteruskan ke Analis Desain.',
+  },
+  'Minta Perbaikan': {
+    src: '/illustrations/workflow-revision.png',
+    alt: 'Petugas menandai dokumen yang perlu diperbaiki',
+    description: 'Tuliskan perbaikan yang diperlukan agar Unit Kerja dapat menindaklanjutinya dengan jelas.',
+  },
+  'Tolak Pengajuan': {
+    src: '/illustrations/workflow-reject.png',
+    alt: 'Petugas menolak dokumen pengajuan',
+    description: 'Pengajuan yang ditolak tidak dapat melanjutkan workflow. Pastikan alasan penolakan sudah tepat.',
+  },
+  'Mulai Analisis Desain': {
+    src: '/illustrations/workflow-analysis.png',
+    alt: 'Analis memulai analisis desain aplikasi',
+    description: 'Mulai penyusunan rancangan teknis dan laporan analisis untuk aplikasi ini.',
+  },
+  'Nyatakan Layak': {
+    src: '/illustrations/workflow-approve.png',
+    alt: 'Analis menyatakan aplikasi layak',
+    description: 'Pastikan analisis dan laporan desain sudah lengkap sebelum aplikasi diteruskan ke pengembangan.',
+  },
+  'Nyatakan Tidak Layak': {
+    src: '/illustrations/workflow-reject.png',
+    alt: 'Analis menyatakan aplikasi tidak layak',
+    description: 'Aplikasi tidak akan diteruskan ke pengembangan. Tuliskan dasar keputusan secara jelas.',
+  },
+  'Mulai Pengembangan': {
+    src: '/illustrations/workflow-development.png',
+    alt: 'Pengembang memulai pengerjaan aplikasi',
+    description: 'Pastikan rancangan teknis sudah dipahami sebelum pekerjaan implementasi dimulai.',
+  },
+  'Tandai Siap UAT': {
+    src: '/illustrations/workflow-testing.png',
+    alt: 'Petugas menyiapkan pengujian aplikasi',
+    description: 'Pastikan implementasi, checklist, dan dokumen pengujian sudah siap untuk UAT.',
+  },
+  'UAT Sesuai': {
+    src: '/illustrations/workflow-testing.png',
+    alt: 'Petugas menyelesaikan validasi UAT',
+    description: 'Konfirmasikan bahwa hasil UAT telah sesuai sebelum aplikasi masuk ke uji keamanan.',
+  },
+  'UAT Perlu Perbaikan': {
+    src: '/illustrations/workflow-revision.png',
+    alt: 'Petugas mencatat perbaikan hasil UAT',
+    description: 'Tuliskan temuan UAT yang harus diperbaiki oleh Tim Implementasi.',
+  },
+  'Selesai Perbaikan UAT': {
+    src: '/illustrations/workflow-testing.png',
+    alt: 'Petugas memvalidasi perbaikan UAT',
+    description: 'Pastikan seluruh temuan UAT telah ditangani sebelum pengujian dilanjutkan.',
+  },
+  'Uji Keamanan Lolos': {
+    src: '/illustrations/workflow-testing.png',
+    alt: 'Petugas menyelesaikan uji keamanan aplikasi',
+    description: 'Konfirmasikan bahwa hasil pengujian keamanan memenuhi persyaratan untuk deployment.',
+  },
+  'Uji Keamanan Tidak Lolos': {
+    src: '/illustrations/workflow-reject.png',
+    alt: 'Petugas menemukan masalah keamanan aplikasi',
+    description: 'Tuliskan temuan keamanan yang harus diperbaiki sebelum dilakukan pengujian ulang.',
+  },
+  'Selesai Perbaikan Keamanan': {
+    src: '/illustrations/workflow-testing.png',
+    alt: 'Petugas memvalidasi perbaikan keamanan',
+    description: 'Pastikan seluruh temuan keamanan sudah ditangani sebelum aplikasi diuji kembali.',
+  },
+}
+
+const selectedActionVisual = computed(() => workflowActionVisuals[selectedAction.value?.label] || {
+  src: '/illustrations/empty-data.png',
+  alt: 'Petugas memproses aplikasi',
+  description: `Lanjutkan proses untuk aplikasi ${app.value?.nama_aplikasi || ''}?`,
 })
 
 function openActionModal(action) {
@@ -1305,15 +1389,15 @@ const progressSteps = [
     icon: 'file',
   },
   {
-    key: ['terverifikasi', 'layak', 'tidak_layak'],
-    label: 'Verifikasi & Kelayakan',
-    desc: 'Tim pengelola memverifikasi dan menilai kelayakan pengajuan',
+    key: ['terverifikasi'],
+    label: 'Verifikasi',
+    desc: 'Pengelola memverifikasi kelengkapan pengajuan',
     icon: 'search',
   },
   {
-    key: ['analisa_desain'],
-    label: 'Analisis & Desain',
-    desc: 'Tim analis menyusun laporan analisis dan desain teknis',
+    key: ['analisa_desain', 'layak', 'tidak_layak'],
+    label: 'Analisis & Kelayakan',
+    desc: 'Analis menyusun desain teknis, lalu menetapkan kelayakan aplikasi',
     icon: 'chart',
   },
   {
@@ -2330,12 +2414,18 @@ const userContextMessage = computed(() => {
       <Modal
         :model-value="showActionModal"
         :title="selectedAction?.label || 'Konfirmasi aksi'"
-        :description="`Lanjutkan proses untuk aplikasi ${app?.nama_aplikasi || ''}?`"
+        :description="selectedActionVisual.description"
         size="md"
         variant="centered"
         :persistent="isSubmittingAction"
         @update:model-value="!$event && closeActionModal()"
       >
+        <div class="workflow-action-visual">
+          <img
+            :src="selectedActionVisual.src"
+            :alt="selectedActionVisual.alt"
+          />
+        </div>
         <TextArea
           v-if="selectedAction?.requiresNote"
           v-model="actionCatatan"
@@ -3949,6 +4039,54 @@ const userContextMessage = computed(() => {
   padding: 20px 24px;
   margin: 0;
   box-shadow: 0 4px 14px rgba(30, 58, 138, 0.18);
+}
+
+.workflow-action-visual {
+  display: flex;
+  justify-content: center;
+  min-height: 168px;
+  margin: -4px 0 12px;
+  overflow: hidden;
+}
+
+.workflow-action-visual img {
+  width: min(100%, 264px);
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  animation: workflow-visual-enter 240ms ease-out both,
+    workflow-visual-float 3.6s ease-in-out 240ms infinite;
+}
+
+@keyframes workflow-visual-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes workflow-visual-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-action-visual img {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .workflow-action-visual {
+    min-height: 144px;
+  }
+
+  .workflow-action-visual img {
+    width: min(100%, 224px);
+  }
 }
 
 .detail-hero-text {

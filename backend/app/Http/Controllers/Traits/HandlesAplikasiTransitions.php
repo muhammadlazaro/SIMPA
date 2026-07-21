@@ -66,12 +66,17 @@ trait HandlesAplikasiTransitions
     public function studiKelayakan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'pengelola_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_TERVERIFIKASI) return ApiResponse::error('Aplikasi belum diverifikasi.');
+        if ($user->role !== 'analis_desain') return ApiResponse::forbidden('Akses ditolak.');
+        if ($aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Analisis desain belum dimulai.');
 
         $request->validate(['is_layak' => 'required|boolean', 'catatan' => 'required|string']);
 
-        $statusBaru = $request->boolean('is_layak') ? Aplikasi::STATUS_LAYAK : Aplikasi::STATUS_TIDAK_LAYAK;
+        $isLayak = $request->boolean('is_layak');
+        if ($isLayak && ! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::LaporanAnalisaDesain)) {
+            return ApiResponse::error('Laporan analisis desain wajib diunggah sebelum aplikasi dinyatakan layak.', null, 422);
+        }
+
+        $statusBaru = $isLayak ? Aplikasi::STATUS_LAYAK : Aplikasi::STATUS_TIDAK_LAYAK;
         $this->recordStatusHistory($aplikasi, 'Studi Kelayakan', $statusBaru, $request->input('catatan'), $user);
 
         return ApiResponse::success(['status' => $statusBaru], 'Hasil studi kelayakan disimpan.');
@@ -81,10 +86,9 @@ trait HandlesAplikasiTransitions
     {
         $user = $request->user();
         if ($user->role !== 'analis_desain') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_LAYAK && $aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Status tidak sesuai.');
+        if ($aplikasi->status !== Aplikasi::STATUS_TERVERIFIKASI && $aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Status tidak sesuai.');
 
-        // Ini bisa di-trigger ketika analis pertama kali menyimpan laporan.
-        if ($aplikasi->status === Aplikasi::STATUS_LAYAK) {
+        if ($aplikasi->status === Aplikasi::STATUS_TERVERIFIKASI) {
             $this->recordStatusHistory($aplikasi, 'Mulai Analisa Desain', Aplikasi::STATUS_ANALISA_DESAIN, 'Analis mulai bekerja', $user);
         }
         return ApiResponse::success(['status' => Aplikasi::STATUS_ANALISA_DESAIN]);
@@ -94,7 +98,7 @@ trait HandlesAplikasiTransitions
     {
         $user = $request->user();
         if ($user->role !== 'tim_implementasi_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Status tidak sesuai.');
+        if ($aplikasi->status !== Aplikasi::STATUS_LAYAK) return ApiResponse::error('Status tidak sesuai.');
         if (! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::LaporanAnalisaDesain)) {
             return ApiResponse::error('Laporan analisa desain wajib diunggah sebelum pengembangan dimulai.', null, 422);
         }

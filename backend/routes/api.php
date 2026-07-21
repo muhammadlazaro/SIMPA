@@ -191,8 +191,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         Route::get('histories', [AplikasiWorkflowController::class, 'statusHistories']);
         Route::post('verifikasi-pengajuan', [AplikasiWorkflowController::class, 'verifikasiPengajuan']);
         Route::post('perbaikan-pengajuan', [AplikasiWorkflowController::class, 'perbaikanPengajuan']);
-        Route::post('studi-kelayakan', [AplikasiWorkflowController::class, 'studiKelayakan']);
-        Route::post('mulai-analisa-desain', [AplikasiWorkflowController::class, 'mulaiAnalisaDesain']);
+        Route::post('studi-kelayakan', [AplikasiWorkflowController::class, 'studiKelayakan'])
+            ->middleware('role:'.UserRole::ANALIS_DESAIN->value);
+        Route::post('mulai-analisa-desain', [AplikasiWorkflowController::class, 'mulaiAnalisaDesain'])
+            ->middleware('role:'.UserRole::ANALIS_DESAIN->value);
         Route::post('mulai-pengembangan', [AplikasiWorkflowController::class, 'mulaiPengembangan']);
         Route::post('siap-uat', [AplikasiWorkflowController::class, 'siapUat']);
         Route::post('verifikasi-uat', [AplikasiWorkflowController::class, 'verifikasiUat']);
