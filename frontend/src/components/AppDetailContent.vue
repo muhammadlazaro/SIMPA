@@ -2106,6 +2106,7 @@ const userContextMessage = computed(() => {
           </p>
         </div>
         <TextArea
+          id="deployment-note"
           v-model="deployModalNote"
           label="Catatan deployment (opsional)"
           rows="3"
@@ -2273,6 +2274,7 @@ const userContextMessage = computed(() => {
           <div v-if="isSecurityReviewEditable" class="sec-form">
             <!-- Ringkasan -->
             <TextArea
+              id="security-test-summary"
               v-model="securityReviewForm.security_test_notes"
               label="Ringkasan hasil uji"
               rows="4"
@@ -2282,6 +2284,7 @@ const userContextMessage = computed(() => {
 
             <!-- Catatan perbaikan -->
             <TextArea
+              id="security-remediation-note"
               v-model="securityReviewForm.note"
               label="Catatan perbaikan (opsional)"
               rows="3"
@@ -2395,6 +2398,7 @@ const userContextMessage = computed(() => {
       >
         <Alert variant="caution" title="Aplikasi production" message="Pastikan aplikasi sudah tidak digunakan sebelum dinonaktifkan." />
         <TextArea
+          id="deactivation-note"
           v-model="deactivateNote"
           label="Catatan (opsional)"
           rows="4"
@@ -2427,6 +2431,7 @@ const userContextMessage = computed(() => {
           />
         </div>
         <TextArea
+          id="workflow-action-note"
           v-if="selectedAction?.requiresNote"
           v-model="actionCatatan"
           :label="selectedAction.noteLabel || 'Catatan tambahan'"

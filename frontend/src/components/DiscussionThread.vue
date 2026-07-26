@@ -165,6 +165,7 @@ async function confirmDelete() {
 
     <div class="discussion-composer">
       <TextArea
+        id="discussion-new-comment"
         v-model="body"
         label="Tulis komentar"
         placeholder="Tulis pertanyaan, hasil review, atau informasi tindak lanjut"
@@ -218,7 +219,13 @@ async function confirmDelete() {
             </header>
 
             <template v-if="editTarget?.id === note.id">
-              <TextArea v-model="editBody" label="Edit komentar" :max-length="500" rows="3" />
+              <TextArea
+                :id="`discussion-edit-${note.id}`"
+                v-model="editBody"
+                label="Edit komentar"
+                :max-length="500"
+                rows="3"
+              />
               <div class="discussion-inline-actions">
                 <Button hierarchy="secondary" size="sm" @click="cancelInlineForms">Batal</Button>
                 <Button hierarchy="primary" size="sm" :disabled="saving || !editBody.trim()" @click="submitEdit">Simpan</Button>
@@ -228,6 +235,7 @@ async function confirmDelete() {
 
             <div v-if="replyTarget?.id === note.id" class="discussion-reply-form">
               <TextArea
+                :id="`discussion-reply-${note.id}`"
                 v-model="replyBody"
                 :label="`Balas ${note.creator?.name || 'komentar'}`"
                 placeholder="Tulis balasan"
@@ -260,7 +268,13 @@ async function confirmDelete() {
                 </div>
               </header>
               <template v-if="editTarget?.id === reply.id">
-                <TextArea v-model="editBody" label="Edit balasan" :max-length="500" rows="2" />
+                <TextArea
+                  :id="`discussion-edit-reply-${reply.id}`"
+                  v-model="editBody"
+                  label="Edit balasan"
+                  :max-length="500"
+                  rows="2"
+                />
                 <div class="discussion-inline-actions">
                   <Button hierarchy="secondary" size="sm" @click="cancelInlineForms">Batal</Button>
                   <Button hierarchy="primary" size="sm" :disabled="saving || !editBody.trim()" @click="submitEdit">Simpan</Button>

@@ -29,6 +29,8 @@ backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 backend/.phpunit.cache/
 backend/.phpunit.result.cache
+backend/coverage.xml
+frontend/coverage/
 
 # Local database files / machine state
 smpa_db/

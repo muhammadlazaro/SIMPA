@@ -300,7 +300,6 @@ body {
 .main-tab-nav .main-tabs {
   background: var(--ina-background-primary);
   padding: 14px 20px 0;
-  border-bottom: 2px solid var(--ina-stroke-primary);
   border-radius: var(--ina-radius-xl) var(--ina-radius-xl) 0 0;
   border: 1px solid rgba(228, 224, 213, 0.8);
   border-bottom: none;
