@@ -60,6 +60,66 @@ jobs:
           npm run build
 
       - name: SonarCloud Scan
+        id: sonarcloud-scan
         uses: SonarSource/sonarqube-scan-action@c7ee0f9df90b7aa20e8dcf9695dcfe2e7da5b4f2 # v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Publish SonarCloud result summary
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: SIMPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          auth_header="Authorization: Bearer ${SONAR_TOKEN}"
+          issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&ps=1&facets=impactSeverities,softwareQualities"
+          gate_url="https://sonarcloud.io/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=master"
+          analyses_url="https://sonarcloud.io/api/project_analyses/search?project=${SONAR_PROJECT_KEY}&branch=master&ps=1"
+
+          curl --fail --silent --show-error \
+            --header "${auth_header}" \
+            "${issues_url}" \
+            --output sonar-issues-summary.json
+          curl --fail --silent --show-error \
+            --header "${auth_header}" \
+            "${gate_url}" \
+            --output sonar-quality-gate.json
+          curl --fail --silent --show-error \
+            --header "${auth_header}" \
+            "${analyses_url}" \
+            --output sonar-latest-analysis.json
+
+          {
+            echo "## SonarCloud analysis summary"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Quality Gate: **$(jq -r '.projectStatus.status' sonar-quality-gate.json)**"
+            echo "- Open issues: **$(jq -r '.total' sonar-issues-summary.json)**"
+            echo
+            echo "### Impact severity"
+            jq -r '
+              .facets[]
+              | select(.property == "impactSeverities")
+              | .values[]
+              | "- \(.val): **\(.count)**"
+            ' sonar-issues-summary.json
+            echo
+            echo "### Failed Quality Gate conditions"
+            jq -r '
+              .projectStatus.conditions[]
+              | select(.status != "OK")
+              | "- \(.metricKey): status **\(.status)**, actual \(.actualValue // "n/a"), threshold \(.errorThreshold // "n/a")"
+            ' sonar-quality-gate.json
+            echo
+            echo "### Latest processed analysis"
+            jq -r '
+              if (.analyses | length) > 0 then
+                "- Revision: `\(.analyses[0].revision // "unknown")`"
+              else
+                "- No processed analysis returned."
+              end
+            ' sonar-latest-analysis.json
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
