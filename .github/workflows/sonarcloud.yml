@@ -75,7 +75,7 @@ jobs:
           set -euo pipefail
 
           auth_header="Authorization: Bearer ${SONAR_TOKEN}"
-          issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&ps=1&facets=impactSeverities,softwareQualities"
+          issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&ps=1&facets=impactSeverities"
           gate_url="https://sonarcloud.io/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=master"
           analyses_url="https://sonarcloud.io/api/project_analyses/search?project=${SONAR_PROJECT_KEY}&branch=master&ps=1"
 
