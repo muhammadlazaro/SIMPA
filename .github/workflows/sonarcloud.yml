@@ -135,12 +135,20 @@ jobs:
                 | {
                     path,
                     uncovered: (
-                      [.measures[] | select(.metric == "new_uncovered_lines") | .value][0]
+                      [
+                        .measures[]
+                        | select(.metric == "new_uncovered_lines")
+                        | (.value // .period.value // .periods[0].value)
+                      ][0]
                       // "0"
                       | tonumber
                     ),
                     lines: (
-                      [.measures[] | select(.metric == "new_lines_to_cover") | .value][0]
+                      [
+                        .measures[]
+                        | select(.metric == "new_lines_to_cover")
+                        | (.value // .period.value // .periods[0].value)
+                      ][0]
                       // "0"
                       | tonumber
                     )
