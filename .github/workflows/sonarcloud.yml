@@ -171,3 +171,12 @@ jobs:
               | "- `\(.path)`: \(.uncovered) uncovered of \(.lines) new lines"
             ' sonar-coverage-components.json
           } | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload SonarCloud issue report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sonar-medium-issues
+          path: sonar-medium-issues.json
+          if-no-files-found: error
+          retention-days: 1
