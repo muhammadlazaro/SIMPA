@@ -316,7 +316,7 @@ function handleFormModalChange(open) {
           </template>
 
           <DataTable>
-            <thead>
+            <template #header>
               <tr>
                 <th scope="col" class="col-num">#</th>
                 <th scope="col">Nama aplikasi</th>
@@ -324,8 +324,8 @@ function handleFormModalChange(open) {
                 <th scope="col">Status</th>
                 <th scope="col">Tanggal</th>
               </tr>
-            </thead>
-            <tbody>
+            </template>
+            <template #body>
               <tr v-for="(item, idx) in rfcs" :key="item.id">
                 <td data-label="Nomor" data-hide-mobile="true" class="col-num">{{ rowNumber(idx) }}</td>
                 <td data-primary="true">
@@ -340,7 +340,7 @@ function handleFormModalChange(open) {
                 </td>
                 <td data-label="Tanggal">{{ formatDate(item.created_at) }}</td>
               </tr>
-            </tbody>
+            </template>
           </DataTable>
         </AsyncState>
 

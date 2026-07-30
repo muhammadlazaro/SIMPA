@@ -13,8 +13,18 @@ defineProps({
     tabindex="0"
     :aria-label="responsive ? 'Tabel data' : 'Tabel data, geser horizontal bila diperlukan'"
   >
-    <table :class="['data-table', 'ui-table', { 'ui-table-responsive': responsive }]"> <!-- NOSONAR: consumers provide semantic thead and th elements through the default slot. -->
-      <slot />
+    <table :class="['data-table', 'ui-table', { 'ui-table-responsive': responsive }]">
+      <thead v-if="$slots.header">
+        <slot name="header">
+          <tr>
+            <th scope="col">Data</th>
+          </tr>
+        </slot>
+      </thead>
+      <tbody v-if="$slots.body">
+        <slot name="body" />
+      </tbody>
+      <slot v-if="!$slots.header && !$slots.body" />
     </table>
   </div>
 </template>
