@@ -504,7 +504,11 @@ function handleConfirmModalChange(open) {
         :persistent="saving"
         @update:model-value="handleFormModalChange"
       >
-        <form class="personil-form idds-personil-form" @submit.prevent="submitForm">
+        <form
+          class="personil-form idds-personil-form"
+          autocomplete="off"
+          @submit.prevent="submitForm"
+        >
           <div class="form-grid">
             <TextField
               v-model="form.name"
@@ -514,7 +518,6 @@ function handleConfirmModalChange(open) {
               required
               :status="fieldError('name') ? 'error' : 'neutral'"
               :status-message="fieldError('name')"
-              autocomplete="name"
             />
             <TextField
               v-model="form.email"
@@ -525,7 +528,6 @@ function handleConfirmModalChange(open) {
               required
               :status="fieldError('email') ? 'error' : 'neutral'"
               :status-message="fieldError('email')"
-              autocomplete="email"
             />
             <div class="form-group-wide">
               <IddsSelect
@@ -548,7 +550,6 @@ function handleConfirmModalChange(open) {
               :helper-text="editingPersonil ? 'Kosongkan jika password tidak diubah.' : 'Minimal 8 karakter dengan huruf besar, angka, dan simbol.'"
               :status="fieldError('password') ? 'error' : 'neutral'"
               :status-message="fieldError('password')"
-              autocomplete="new-password"
             />
             <PasswordInput
               v-model="form.password_confirmation"
@@ -556,7 +557,6 @@ function handleConfirmModalChange(open) {
               placeholder="Ulangi password"
               :max-length="128"
               :required="!editingPersonil || !!form.password"
-              autocomplete="new-password"
             />
           </div>
           <div class="modal-actions">
