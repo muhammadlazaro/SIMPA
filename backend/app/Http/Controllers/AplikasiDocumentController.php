@@ -121,13 +121,18 @@ class AplikasiDocumentController extends Controller
     public function preview(Request $request, Aplikasi $aplikasi, AplikasiDocument $document): BinaryFileResponse|JsonResponse
     {
         if ((int) $document->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Dokumen tidak ditemukan.');
+            $response = ApiResponse::notFound('Dokumen tidak ditemukan.');
+        } elseif (! AplikasiDocumentAccess::canView($request->user(), $aplikasi)) {
+            $response = ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        } else {
+            $response = $this->buildPreviewResponse($document);
         }
 
-        if (! AplikasiDocumentAccess::canView($request->user(), $aplikasi)) {
-            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
-        }
+        return $response;
+    }
 
+    private function buildPreviewResponse(AplikasiDocument $document): BinaryFileResponse|JsonResponse
+    {
         $diskName = $this->resolveDisk($document);
         /** @var FilesystemAdapter $disk */
         $disk = Storage::disk($diskName);

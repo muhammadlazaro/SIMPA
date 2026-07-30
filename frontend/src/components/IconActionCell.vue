@@ -8,14 +8,19 @@ defineProps({
 </script>
 
 <template>
-  <div class="ui-icon-action-cell" role="group" :aria-label="label">
+  <fieldset class="ui-icon-action-cell">
+    <legend class="sr-only">{{ label }}</legend>
     <slot />
-  </div>
+  </fieldset>
 </template>
 
 <style scoped>
 .ui-icon-action-cell {
+  min-width: 0;
   min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;

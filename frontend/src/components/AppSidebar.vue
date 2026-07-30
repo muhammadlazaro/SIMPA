@@ -308,12 +308,12 @@ defineExpose({ toggleSidebar })
 .sidebar-link:hover,
 .collapse-toggle:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  background: #2b3e75;
 }
 
 .sidebar-link.active {
   color: #fff;
-  background: rgba(255, 255, 255, 0.14);
+  background: #354a80;
   box-shadow: inset 3px 0 0 var(--ina-warning-400);
   font-weight: var(--idds-weight-semibold);
 }

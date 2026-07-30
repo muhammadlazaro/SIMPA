@@ -1878,6 +1878,7 @@ code {
   color: var(--ina-content-tertiary) !important;
   font-size: var(--idds-caption-size) !important;
   margin-bottom: 20px !important;
+  opacity: 0.7;
   line-height: var(--idds-caption-line) !important;
 }
 
@@ -2476,7 +2477,6 @@ code {
   line-height: var(--idds-caption-line);
 }
 .empty-message p { margin: 0 0 4px; }
-.empty-message-hint { font-size: var(--idds-caption-small-size); opacity: 0.7; line-height: var(--idds-caption-small-line); }
 .note-empty { border: 1px dashed var(--ina-stroke-primary); border-radius: 8px; }
 /* ============================================================ */
 

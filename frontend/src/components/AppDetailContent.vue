@@ -2658,6 +2658,7 @@ const userContextMessage = computed(() => {
 
 .unit-doc-card {
   margin-bottom: 16px;
+  padding: 20px;
 }
 
 
@@ -3655,7 +3656,7 @@ const userContextMessage = computed(() => {
   border: 1px solid rgba(228, 224, 213, 0.8);
   border-radius: var(--ina-radius-xl);
   box-shadow: var(--ina-shadow-base);
-  padding: 20px 24px 24px;
+  padding: 20px 22px;
   overflow: hidden;
 }
 
@@ -4117,20 +4118,21 @@ const userContextMessage = computed(() => {
 
 .detail-tabs-card {
   margin: 14px 0 0;
-  padding: 18px 24px 0;
-  border-bottom: 0;
+  padding: 0;
+  border: 0;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+  background: transparent;
   position: relative;
   z-index: 1;
 }
 
 .detail-tabs {
-  border-bottom: 1px solid var(--ina-stroke-primary);
+  border-bottom: 1px solid var(--ui-border);
   display: flex;
-  gap: 6px;
+  gap: 18px;
   margin: 0;
-  padding: 0 0 14px;
+  padding: 0;
   overflow-x: auto;
   scrollbar-width: thin;
 }
@@ -4150,7 +4152,7 @@ const userContextMessage = computed(() => {
   border-top: 0;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
-  padding: 24px;
+  padding: 22px;
   position: relative;
   z-index: 1;
 }
@@ -4877,19 +4879,6 @@ const userContextMessage = computed(() => {
   margin: 0;
 }
 
-.detail-tabs-card {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.detail-tabs {
-  gap: 18px;
-  padding: 0;
-  border-bottom: 1px solid var(--ui-border);
-  scrollbar-width: thin;
-}
-
 .detail-tabs-card .detail-tabs button {
   min-height: 44px;
   padding: 10px 2px 9px;
@@ -4921,18 +4910,6 @@ const userContextMessage = computed(() => {
   border-radius: var(--ui-radius);
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-xs);
-}
-
-.detail-tab-panel {
-  padding: 22px;
-}
-
-.unit-doc-card {
-  padding: 20px;
-}
-
-.uk-stepper-wrap {
-  padding: 20px 22px;
 }
 
 .unit-doc-desc {

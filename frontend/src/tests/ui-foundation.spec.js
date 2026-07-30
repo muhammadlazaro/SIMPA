@@ -73,7 +73,7 @@ describe('UI foundation', () => {
       props: { loading: true, loadingLabel: 'Memuat aplikasi' },
       global: { stubs: { Icons: iconStub } },
     })
-    expect(loading.get('[role="status"]').attributes('aria-label')).toBe('Memuat aplikasi')
+    expect(loading.get('output').attributes('aria-label')).toBe('Memuat aplikasi')
     expect(loading.findAll('.ina-skeleton')).toHaveLength(12)
 
     const error = mount(AsyncState, {
@@ -159,7 +159,7 @@ describe('UI foundation', () => {
       },
     })
 
-    expect(wrapper.get('[role="group"]').attributes('aria-label')).toBe('Aksi aplikasi SIMPA')
+    expect(wrapper.get('fieldset legend').text()).toBe('Aksi aplikasi SIMPA')
     expect(wrapper.find('[aria-haspopup="menu"]').exists()).toBe(false)
   })
 

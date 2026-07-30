@@ -10,6 +10,7 @@ defineProps({
 <template>
   <div
     :class="['table-wrap', { 'table-wrap-responsive': responsive }]"
+    role="region"
     tabindex="0"
     :aria-label="responsive ? 'Tabel data' : 'Tabel data, geser horizontal bila diperlukan'"
   >

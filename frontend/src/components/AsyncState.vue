@@ -41,14 +41,14 @@ defineEmits(['retry'])
 </script>
 
 <template>
-  <div v-if="loading" class="ui-async-state loading" role="status" :aria-label="loadingLabel">
+  <output v-if="loading" class="ui-async-state loading" :aria-label="loadingLabel">
     <span class="sr-only">{{ loadingLabel }}</span>
     <div v-for="index in 4" :key="index" class="ui-skeleton-row">
       <Skeleton height="12px" width="100%" rounded="md" />
       <Skeleton height="12px" width="72%" rounded="md" />
       <Skeleton height="12px" width="88%" rounded="md" />
     </div>
-  </div>
+  </output>
 
   <div v-else-if="error" class="ui-async-state error" role="alert">
     <Alert
@@ -145,12 +145,12 @@ defineEmits(['retry'])
   align-items: center;
   justify-content: center;
   border-radius: var(--ina-radius-xl);
-  color: #64748b;
+  color: #475569;
   background: #eef2f7;
 }
 
 .error .ui-state-icon {
-  color: #dc2626;
+  color: #b91c1c;
   background: #fee2e2;
 }
 

@@ -48,7 +48,7 @@ let searchTimer = null
 const hasActiveSearch = computed(() => !!search.value?.trim())
 const canSubmit = computed(() => productionApps.value.length > 0)
 const applicationOptions = computed(() => productionApps.value.map((app) => ({
-  label: `${app.name}${app.layanan ? ` - ${app.layanan}` : ''}`,
+  label: [app.name, app.layanan].filter(Boolean).join(' - '),
   value: app.id,
 })))
 const rfcTypeOptions = [
