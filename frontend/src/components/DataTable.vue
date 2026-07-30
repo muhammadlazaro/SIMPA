@@ -13,7 +13,7 @@ defineProps({
     tabindex="0"
     :aria-label="responsive ? 'Tabel data' : 'Tabel data, geser horizontal bila diperlukan'"
   >
-    <table :class="['data-table', 'ui-table', { 'ui-table-responsive': responsive }]">
+    <table :class="['data-table', 'ui-table', { 'ui-table-responsive': responsive }]"> <!-- NOSONAR: consumers provide semantic thead and th elements through the default slot. -->
       <slot />
     </table>
   </div>

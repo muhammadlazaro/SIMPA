@@ -8,7 +8,7 @@ import {
   Modal,
   SingleFileUpload,
   TabHorizontal,
-  TextArea,
+  TextArea as IddsTextArea,
   TextField,
 } from '@idds/vue'
 import {
@@ -2105,7 +2105,7 @@ const userContextMessage = computed(() => {
               : 'Pastikan build dan health check staging sudah valid.' }}
           </p>
         </div>
-        <TextArea
+        <IddsTextArea
           id="deployment-note"
           v-model="deployModalNote"
           label="Catatan deployment (opsional)"
@@ -2273,7 +2273,7 @@ const userContextMessage = computed(() => {
           <!-- Form input baru hanya tersedia selama hasil masih dapat diubah. -->
           <div v-if="isSecurityReviewEditable" class="sec-form">
             <!-- Ringkasan -->
-            <TextArea
+            <IddsTextArea
               id="security-test-summary"
               v-model="securityReviewForm.security_test_notes"
               label="Ringkasan hasil uji"
@@ -2283,7 +2283,7 @@ const userContextMessage = computed(() => {
             />
 
             <!-- Catatan perbaikan -->
-            <TextArea
+            <IddsTextArea
               id="security-remediation-note"
               v-model="securityReviewForm.note"
               label="Catatan perbaikan (opsional)"
@@ -2397,7 +2397,7 @@ const userContextMessage = computed(() => {
         @update:model-value="!$event && closeDeactivateModal()"
       >
         <Alert variant="caution" title="Aplikasi production" message="Pastikan aplikasi sudah tidak digunakan sebelum dinonaktifkan." />
-        <TextArea
+        <IddsTextArea
           id="deactivation-note"
           v-model="deactivateNote"
           label="Catatan (opsional)"
@@ -2430,7 +2430,7 @@ const userContextMessage = computed(() => {
             :alt="selectedActionVisual.alt"
           />
         </div>
-        <TextArea
+        <IddsTextArea
           id="workflow-action-note"
           v-if="selectedAction?.requiresNote"
           v-model="actionCatatan"

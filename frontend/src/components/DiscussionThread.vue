@@ -1,5 +1,5 @@
 <script setup>
-import { Avatar, Button, TextArea } from '@idds/vue'
+import { Avatar, Button, TextArea as IddsTextArea } from '@idds/vue'
 import {
   IconArrowBackUp,
   IconEdit,
@@ -164,7 +164,7 @@ async function confirmDelete() {
     </div>
 
     <div class="discussion-composer">
-      <TextArea
+      <IddsTextArea
         id="discussion-new-comment"
         v-model="body"
         label="Tulis komentar"
@@ -219,7 +219,7 @@ async function confirmDelete() {
             </header>
 
             <template v-if="editTarget?.id === note.id">
-              <TextArea
+              <IddsTextArea
                 :id="`discussion-edit-${note.id}`"
                 v-model="editBody"
                 label="Edit komentar"
@@ -234,7 +234,7 @@ async function confirmDelete() {
             <p v-else class="discussion-text">{{ note.body }}</p>
 
             <div v-if="replyTarget?.id === note.id" class="discussion-reply-form">
-              <TextArea
+              <IddsTextArea
                 :id="`discussion-reply-${note.id}`"
                 v-model="replyBody"
                 :label="`Balas ${note.creator?.name || 'komentar'}`"
@@ -268,7 +268,7 @@ async function confirmDelete() {
                 </div>
               </header>
               <template v-if="editTarget?.id === reply.id">
-                <TextArea
+                <IddsTextArea
                   :id="`discussion-edit-reply-${reply.id}`"
                   v-model="editBody"
                   label="Edit balasan"
