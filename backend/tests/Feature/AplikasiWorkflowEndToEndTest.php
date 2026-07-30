@@ -12,6 +12,8 @@ class AplikasiWorkflowEndToEndTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const CORRECTION_NOTIFICATION_TITLE = 'Pengajuan Perlu Perbaikan';
+
     /** @var array<string, User> */
     private array $actors = [];
 
@@ -51,7 +53,7 @@ class AplikasiWorkflowEndToEndTest extends TestCase
         $this->assertDatabaseHas('app_notifications', [
             'user_id' => $this->actors['unit_kerja']->id,
             'aplikasi_id' => $correctionApp->id,
-            'title' => 'Pengajuan Perlu Perbaikan',
+            'title' => self::CORRECTION_NOTIFICATION_TITLE,
             'type' => 'action_required',
         ]);
 
@@ -66,9 +68,9 @@ class AplikasiWorkflowEndToEndTest extends TestCase
         $notifications = $this->asRole('unit_kerja')
             ->getJson('/api/notifications')
             ->assertOk()
-            ->assertJsonFragment(['title' => 'Pengajuan Perlu Perbaikan'])
+            ->assertJsonFragment(['title' => self::CORRECTION_NOTIFICATION_TITLE])
             ->json('data.notifications');
-        $correctionNotification = collect($notifications)->firstWhere('title', 'Pengajuan Perlu Perbaikan');
+        $correctionNotification = collect($notifications)->firstWhere('title', self::CORRECTION_NOTIFICATION_TITLE);
         $this->assertNotNull($correctionNotification);
         $this->asRole('unit_kerja')
             ->patchJson("/api/notifications/{$correctionNotification['id']}/read")

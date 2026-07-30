@@ -22,35 +22,72 @@ onMounted(() => {
 })
 
 // Validate email format
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
+function isValidEmail(value) {
+  const normalized = value.trim()
+  const atIndex = normalized.indexOf('@')
+  const lastDotIndex = normalized.lastIndexOf('.')
+
+  return atIndex > 0
+    && lastDotIndex > atIndex + 1
+    && lastDotIndex < normalized.length - 1
+    && !/\s/u.test(normalized)
 }
 
-async function submit() {
+function resetErrors() {
   error.value = ''
   fieldErrors.email = ''
   fieldErrors.password = ''
+}
 
+function validateCredentials() {
   if (!email.value.trim()) {
     fieldErrors.email = 'Masukkan alamat email Anda.'
-    return
+    return false
   }
 
   if (!isValidEmail(email.value)) {
     fieldErrors.email = 'Gunakan format email yang valid, misalnya nama@instansi.go.id.'
-    return
+    return false
   }
 
   if (!password.value) {
     fieldErrors.password = 'Masukkan password Anda.'
-    return
+    return false
   }
 
   if (password.value.length < 8) {
     fieldErrors.password = 'Password minimal terdiri dari 8 karakter.'
+    return false
+  }
+
+  return true
+}
+
+function applyValidationErrors(errors) {
+  fieldErrors.email = errors.email?.[0] || errors.email || ''
+  fieldErrors.password = errors.password?.[0] || errors.password || ''
+
+  if (!fieldErrors.email && !fieldErrors.password) {
+    error.value = 'Periksa kembali data yang Anda masukkan.'
+  }
+}
+
+function handleLoginError(exception) {
+  const response = exception?.response
+  if (response?.status === 422 && response.data?.errors) {
+    applyValidationErrors(response.data.errors)
     return
   }
+
+  error.value = response?.data?.message
+    || (response?.status === 422
+      ? 'Periksa kembali data yang Anda masukkan.'
+      : 'Akun belum dapat diakses. Periksa koneksi lalu coba lagi.')
+}
+
+async function submit() {
+  resetErrors()
+  if (!validateCredentials()) return
 
   loading.value = true
   try {
@@ -64,26 +101,8 @@ async function submit() {
 
     const role = data.data.user?.role
     router.push(getHomeByRole(role).path)
-  } catch (e) {
-    if (e?.response?.status === 422) {
-      const errors = e.response.data?.errors
-      if (errors) {
-        const emailMessage = errors.email?.[0] || errors.email
-        const passwordMessage = errors.password?.[0] || errors.password
-        fieldErrors.email = emailMessage || ''
-        fieldErrors.password = passwordMessage || ''
-
-        if (!fieldErrors.email && !fieldErrors.password) {
-          error.value = 'Periksa kembali data yang Anda masukkan.'
-        }
-      } else {
-        error.value = e.response.data?.message || 'Periksa kembali data yang Anda masukkan.'
-      }
-    } else if (e?.response?.data?.message) {
-      error.value = e.response.data.message
-    } else {
-      error.value = 'Akun belum dapat diakses. Periksa koneksi lalu coba lagi.'
-    }
+  } catch (exception) {
+    handleLoginError(exception)
   } finally {
     loading.value = false
   }

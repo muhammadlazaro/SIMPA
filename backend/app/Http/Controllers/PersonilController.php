@@ -17,6 +17,8 @@ use Illuminate\Validation\Rules\Password;
 
 class PersonilController extends Controller
 {
+    private const LAST_ACTIVE_ADMIN_MESSAGE = 'Minimal harus ada satu Admin Sistem aktif';
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -42,7 +44,7 @@ class PersonilController extends Controller
 
         $search = trim((string) ($validated['q'] ?? ''));
         if ($search !== '') {
-            $safeSearch = '%' . QueryHelper::escapeLike($search) . '%';
+            $safeSearch = '%'.QueryHelper::escapeLike($search).'%';
             $query->where(function ($subQuery) use ($safeSearch) {
                 $subQuery
                     ->where('name', 'like', $safeSearch)
@@ -116,7 +118,7 @@ class PersonilController extends Controller
     public function update(Request $request, string $id): JsonResponse
     {
         $personil = User::withTrashed()->find($id);
-        if (!$personil) {
+        if (! $personil) {
             return ApiResponse::notFound('Personil tidak ditemukan');
         }
 
@@ -146,14 +148,14 @@ class PersonilController extends Controller
         }
 
         if ($this->wouldRemoveLastActiveAdminSistem($personil, $newRole)) {
-            return ApiResponse::forbidden('Minimal harus ada satu Admin Sistem aktif');
+            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
 
         $personil->name = $validated['name'];
         $personil->email = $validated['email'];
         $personil->role = $newRole;
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $personil->password = Hash::make((string) $validated['password']);
             $personil->tokens()->delete();
         }
@@ -173,7 +175,7 @@ class PersonilController extends Controller
     public function destroy(Request $request, string $id): JsonResponse
     {
         $personil = User::find($id);
-        if (!$personil) {
+        if (! $personil) {
             return ApiResponse::notFound('Personil tidak ditemukan atau sudah nonaktif');
         }
 
@@ -183,7 +185,7 @@ class PersonilController extends Controller
         }
 
         if ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
-            return ApiResponse::forbidden('Minimal harus ada satu Admin Sistem aktif');
+            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
 
         $personil->tokens()->delete();
@@ -201,7 +203,7 @@ class PersonilController extends Controller
     public function forceDestroy(Request $request, string $id): JsonResponse
     {
         $personil = User::withTrashed()->find($id);
-        if (!$personil) {
+        if (! $personil) {
             return ApiResponse::notFound('Personil tidak ditemukan');
         }
 
@@ -211,7 +213,7 @@ class PersonilController extends Controller
         }
 
         if ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
-            return ApiResponse::forbidden('Minimal harus ada satu Admin Sistem aktif');
+            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
 
         $personilId = $personil->getKey();
@@ -235,7 +237,7 @@ class PersonilController extends Controller
     public function restore(Request $request, string $id): JsonResponse
     {
         $personil = User::onlyTrashed()->find($id);
-        if (!$personil) {
+        if (! $personil) {
             return ApiResponse::notFound('Personil nonaktif tidak ditemukan');
         }
 

@@ -4,11 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
-use App\Models\AppNotification;
 
 /**
  * @property int $id
@@ -42,20 +41,35 @@ class Aplikasi extends Model
 
     // Status Constants
     public const STATUS_DIAJUKAN = 'diajukan';
+
     public const STATUS_PERLU_PERBAIKAN = 'perlu_perbaikan_pengajuan';
+
     public const STATUS_DITOLAK = 'ditolak';
+
     public const STATUS_TERVERIFIKASI = 'terverifikasi';
+
     public const STATUS_LAYAK = 'layak';
+
     public const STATUS_TIDAK_LAYAK = 'tidak_layak';
+
     public const STATUS_ANALISA_DESAIN = 'analisa_desain';
+
     public const STATUS_PENGEMBANGAN = 'pengembangan';
+
     public const STATUS_UAT = 'uat';
+
     public const STATUS_PERBAIKAN_UAT = 'perbaikan_uat';
+
     public const STATUS_UJI_KEAMANAN = 'uji_keamanan';
+
     public const STATUS_PERBAIKAN_KEAMANAN = 'perbaikan_keamanan';
+
     public const STATUS_SIAP_DEPLOY = 'siap_deploy';
+
     public const STATUS_DEPLOYED_STAGING = 'deployed_staging';
+
     public const STATUS_DEPLOYED_PRODUCTION = 'deployed_production';
+
     public const STATUS_NONAKTIF = 'nonaktif';
 
     protected $fillable = [
@@ -97,7 +111,7 @@ class Aplikasi extends Model
     {
         // Automatically set created_by when creating
         static::creating(function ($model) {
-            if (Auth::check() && !$model->created_by) {
+            if (Auth::check() && ! $model->created_by) {
                 $model->created_by = Auth::id();
             }
         });
@@ -109,33 +123,7 @@ class Aplikasi extends Model
             }
         });
 
-        static::created(function ($model) {
-            if ($model->getAttribute('status') !== self::STATUS_DIAJUKAN) {
-                return;
-            }
-
-            $creator = User::query()->find($model->getAttribute('created_by'));
-            if (! $creator?->isUnitKerja()) {
-                return;
-            }
-
-            $appName = (string) $model->getAttribute('nama_aplikasi');
-            User::query()
-                ->where('role', 'pengelola_aplikasi')
-                ->get(['id'])
-                ->each(function (User $pengelola) use ($model, $appName): void {
-                    AppNotification::create([
-                        'user_id' => $pengelola->getKey(),
-                        'aplikasi_id' => $model->getKey(),
-                        'type' => 'action_required',
-                        'title' => 'Pengajuan Baru Masuk',
-                        'body' => sprintf(
-                            'Aplikasi "%s" baru diajukan dan menunggu verifikasi Anda.',
-                            $appName
-                        ),
-                    ]);
-                });
-        });
+        static::created(fn (self $model) => self::notifyCreatedSubmission($model));
 
         /**
          * Kirim notifikasi in-app ke semua pihak yang berkepentingan saat status workflow berubah.
@@ -155,133 +143,133 @@ class Aplikasi extends Model
             }
 
             $newStatus = $model->getAttribute('status');
-            $appName   = $model->getAttribute('nama_aplikasi');
+            $appName = $model->getAttribute('nama_aplikasi');
 
             // ─── 1. Daftar notifikasi per-role berdasarkan status baru ────────────────
             $recipientRoles = match ($newStatus) {
                 // Pengajuan baru → pengelola harus memverifikasi
                 self::STATUS_DIAJUKAN => [
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'action_required',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'action_required',
                         'title' => 'Pengajuan Baru Masuk',
-                        'body'  => 'Aplikasi "%s" baru diajukan dan menunggu verifikasi Anda.',
+                        'body' => 'Aplikasi "%s" baru diajukan dan menunggu verifikasi Anda.',
                     ],
                 ],
 
                 // Pengelola menyerahkan pengajuan terverifikasi kepada Analis Desain.
                 self::STATUS_TERVERIFIKASI => [
                     [
-                        'role'  => 'analis_desain',
-                        'type'  => 'action_required',
+                        'role' => 'analis_desain',
+                        'type' => 'action_required',
                         'title' => 'Analisis Desain Diperlukan',
-                        'body'  => 'Pengajuan aplikasi "%s" telah diverifikasi. Silakan mulai proses analisis desain.',
+                        'body' => 'Pengajuan aplikasi "%s" telah diverifikasi. Silakan mulai proses analisis desain.',
                     ],
                 ],
 
                 self::STATUS_LAYAK => [
                     [
-                        'role'  => 'tim_implementasi_aplikasi',
-                        'type'  => 'action_required',
+                        'role' => 'tim_implementasi_aplikasi',
+                        'type' => 'action_required',
                         'title' => 'Aplikasi Siap Dikembangkan',
-                        'body'  => 'Analisis desain aplikasi "%s" telah selesai dan dinyatakan layak. Silakan mulai pengembangan.',
+                        'body' => 'Analisis desain aplikasi "%s" telah selesai dan dinyatakan layak. Silakan mulai pengembangan.',
                     ],
                 ],
 
                 // Pengembangan dimulai → pengelola perlu tahu progress
                 self::STATUS_PENGEMBANGAN => [
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Pengembangan Dimulai',
-                        'body'  => 'Aplikasi "%s" kini memasuki tahap pengembangan oleh tim implementasi.',
+                        'body' => 'Aplikasi "%s" kini memasuki tahap pengembangan oleh tim implementasi.',
                     ],
                 ],
 
                 // Siap UAT: pengelola memantau sampai dokumen UAT diunggah unit kerja.
                 self::STATUS_UAT => [
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Aplikasi Masuk Tahap UAT',
-                        'body'  => 'Aplikasi "%s" telah selesai dikembangkan dan menunggu dokumen UAT dari Unit Kerja.',
+                        'body' => 'Aplikasi "%s" telah selesai dikembangkan dan menunggu dokumen UAT dari Unit Kerja.',
                     ],
                 ],
 
                 // Perbaikan UAT → tim implementasi harus perbaiki
                 self::STATUS_PERBAIKAN_UAT => [
                     [
-                        'role'  => 'tim_implementasi_aplikasi',
-                        'type'  => 'action_required',
+                        'role' => 'tim_implementasi_aplikasi',
+                        'type' => 'action_required',
                         'title' => 'Perbaikan UAT Diperlukan',
-                        'body'  => 'Aplikasi "%s" belum memenuhi UAT dan memerlukan perbaikan sebelum dapat dilanjutkan.',
+                        'body' => 'Aplikasi "%s" belum memenuhi UAT dan memerlukan perbaikan sebelum dapat dilanjutkan.',
                     ],
                 ],
 
                 // Uji keamanan → tim uji harus menguji
                 self::STATUS_UJI_KEAMANAN => [
                     [
-                        'role'  => 'tim_uji_keamanan',
-                        'type'  => 'action_required',
+                        'role' => 'tim_uji_keamanan',
+                        'type' => 'action_required',
                         'title' => 'Uji Keamanan Diperlukan',
-                        'body'  => 'Aplikasi "%s" telah lulus UAT dan siap untuk diuji keamanannya.',
+                        'body' => 'Aplikasi "%s" telah lulus UAT dan siap untuk diuji keamanannya.',
                     ],
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Aplikasi Masuk Uji Keamanan',
-                        'body'  => 'Aplikasi "%s" telah melewati UAT dan kini masuk tahap uji keamanan.',
+                        'body' => 'Aplikasi "%s" telah melewati UAT dan kini masuk tahap uji keamanan.',
                     ],
                 ],
 
                 // Perbaikan keamanan → tim implementasi harus perbaiki, pengelola perlu tahu
                 self::STATUS_PERBAIKAN_KEAMANAN => [
                     [
-                        'role'  => 'tim_implementasi_aplikasi',
-                        'type'  => 'action_required',
+                        'role' => 'tim_implementasi_aplikasi',
+                        'type' => 'action_required',
                         'title' => 'Perbaikan Keamanan Diperlukan',
-                        'body'  => 'Aplikasi "%s" belum lolos uji keamanan. Silakan lakukan perbaikan yang diperlukan.',
+                        'body' => 'Aplikasi "%s" belum lolos uji keamanan. Silakan lakukan perbaikan yang diperlukan.',
                     ],
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Hasil Uji Keamanan: Belum Lolos',
-                        'body'  => 'Aplikasi "%s" belum lolos uji keamanan. Tim implementasi sedang melakukan perbaikan.',
+                        'body' => 'Aplikasi "%s" belum lolos uji keamanan. Tim implementasi sedang melakukan perbaikan.',
                     ],
                 ],
 
                 // Siap deploy → devops harus deploy, pengelola perlu tahu kabar baik ini
                 self::STATUS_SIAP_DEPLOY => [
                     [
-                        'role'  => 'devops_developer',
-                        'type'  => 'action_required',
+                        'role' => 'devops_developer',
+                        'type' => 'action_required',
                         'title' => 'Siap untuk Deployment',
-                        'body'  => 'Aplikasi "%s" telah lolos uji keamanan dan siap untuk dideploy ke production.',
+                        'body' => 'Aplikasi "%s" telah lolos uji keamanan dan siap untuk dideploy ke production.',
                     ],
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Aplikasi Lolos Uji Keamanan',
-                        'body'  => 'Aplikasi "%s" telah lolos uji keamanan dan menunggu proses deployment oleh DevOps.',
+                        'body' => 'Aplikasi "%s" telah lolos uji keamanan dan menunggu proses deployment oleh DevOps.',
                     ],
                 ],
 
                 // Deployed Production → pengelola dan unit kerja perlu tahu aplikasi sudah live
                 self::STATUS_DEPLOYED_PRODUCTION => [
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Aplikasi Berhasil Dideploy',
-                        'body'  => 'Aplikasi "%s" telah berhasil dideploy ke production dan kini aktif.',
+                        'body' => 'Aplikasi "%s" telah berhasil dideploy ke production dan kini aktif.',
                     ],
                 ],
 
                 self::STATUS_NONAKTIF => [
                     [
-                        'role'  => 'pengelola_aplikasi',
-                        'type'  => 'info',
+                        'role' => 'pengelola_aplikasi',
+                        'type' => 'info',
                         'title' => 'Aplikasi Dinonaktifkan',
-                        'body'  => 'Aplikasi "%s" telah ditandai nonaktif dan tidak lagi digunakan.',
+                        'body' => 'Aplikasi "%s" telah ditandai nonaktif dan tidak lagi digunakan.',
                     ],
                 ],
 
@@ -289,95 +277,157 @@ class Aplikasi extends Model
             };
 
             // ─── 2. Kirim notifikasi ke setiap role yang relevan ──────────────────────
-            foreach ($recipientRoles as $entry) {
-                $usersToNotify = \App\Models\User::where('role', $entry['role'])->get();
-                foreach ($usersToNotify as $user) {
-                    AppNotification::create([
-                        'user_id'     => $user->getKey(),
-                        'aplikasi_id' => $model->getKey(),
-                        'type'        => $entry['type'],
-                        'title'       => $entry['title'],
-                        'body'        => sprintf($entry['body'], $appName),
-                    ]);
-                }
-            }
+            self::notifyRoles($model, $recipientRoles, $appName);
 
-            if ($newStatus === self::STATUS_UAT) {
-                $unitKerjaEntry = [
-                    'type'  => 'action_required',
-                    'title' => 'Aplikasi Siap UAT',
-                    'body'  => 'Aplikasi "%s" siap diuji. Silakan unduh format UAT, lakukan pengujian, dan unggah dokumen hasil UAT.',
-                ];
-
-                $creator = $model->creator()->select('id', 'role')->first();
-                $usersToNotify = $creator?->isUnitKerja()
-                    ? collect([$creator])
-                    : \App\Models\User::where('role', 'unit_kerja')->get();
-
-                foreach ($usersToNotify as $unitKerja) {
-                    AppNotification::create([
-                        'user_id'     => $unitKerja->getKey(),
-                        'aplikasi_id' => $model->getKey(),
-                        'type'        => $unitKerjaEntry['type'],
-                        'title'       => $unitKerjaEntry['title'],
-                        'body'        => sprintf($unitKerjaEntry['body'], $appName),
-                    ]);
-                }
-            }
+            self::notifyUnitKerjaForUat($model, $newStatus, $appName);
 
             // ─── 3. Notifikasi khusus untuk Unit Kerja (pemilik aplikasi) ─────────────
             // Hanya untuk status yang berdampak langsung: keputusan penting dan final.
-            if ($model->created_by) {
-                $unitKerjaEntry = match ($newStatus) {
-                    self::STATUS_PERLU_PERBAIKAN => [
-                        'type'  => 'action_required',
-                        'title' => 'Pengajuan Perlu Perbaikan',
-                        'body'  => 'Pengajuan aplikasi "%s" memerlukan perbaikan sebelum dapat diproses lebih lanjut.',
-                    ],
-                    self::STATUS_DITOLAK => [
-                        'type'  => 'info',
-                        'title' => 'Pengajuan Ditolak',
-                        'body'  => 'Pengajuan aplikasi "%s" telah ditolak. Silakan hubungi pengelola untuk informasi lebih lanjut.',
-                    ],
-                    self::STATUS_TERVERIFIKASI => [
-                        'type'  => 'info',
-                        'title' => 'Pengajuan Terverifikasi',
-                        'body'  => 'Pengajuan aplikasi "%s" telah diverifikasi dan akan memasuki proses analisis desain.',
-                    ],
-                    self::STATUS_LAYAK => [
-                        'type'  => 'info',
-                        'title' => 'Aplikasi Dinyatakan Layak',
-                        'body'  => 'Analisis desain aplikasi "%s" telah selesai, dinyatakan layak, dan akan memasuki tahap pengembangan.',
-                    ],
-                    self::STATUS_TIDAK_LAYAK => [
-                        'type'  => 'info',
-                        'title' => 'Aplikasi Tidak Layak',
-                        'body'  => 'Aplikasi "%s" dinyatakan tidak layak setelah evaluasi studi kelayakan.',
-                    ],
-                    self::STATUS_DEPLOYED_PRODUCTION => [
-                        'type'  => 'info',
-                        'title' => 'Aplikasi Anda Sudah Live!',
-                        'body'  => 'Selamat! Aplikasi "%s" telah berhasil dideploy dan kini dapat diakses pengguna.',
-                    ],
-                    self::STATUS_NONAKTIF => [
-                        'type'  => 'info',
-                        'title' => 'Aplikasi Dinonaktifkan',
-                        'body'  => 'Aplikasi "%s" telah ditandai nonaktif dan tidak lagi digunakan.',
-                    ],
-                    default => null,
-                };
-
-                if ($unitKerjaEntry !== null) {
-                    AppNotification::create([
-                        'user_id'     => $model->created_by,
-                        'aplikasi_id' => $model->getKey(),
-                        'type'        => $unitKerjaEntry['type'],
-                        'title'       => $unitKerjaEntry['title'],
-                        'body'        => sprintf($unitKerjaEntry['body'], $appName),
-                    ]);
-                }
-            }
+            self::notifyOwnerForStatus($model, $newStatus, $appName);
         });
+    }
+
+    private static function notifyCreatedSubmission(self $model): void
+    {
+        if ($model->getAttribute('status') !== self::STATUS_DIAJUKAN) {
+            return;
+        }
+
+        $creator = User::query()->find($model->getAttribute('created_by'));
+        if (! $creator?->isUnitKerja()) {
+            return;
+        }
+
+        $appName = (string) $model->getAttribute('nama_aplikasi');
+        User::query()
+            ->where('role', 'pengelola_aplikasi')
+            ->get(['id'])
+            ->each(function (User $pengelola) use ($model, $appName): void {
+                self::createNotification(
+                    $model,
+                    $pengelola->getKey(),
+                    'action_required',
+                    'Pengajuan Baru Masuk',
+                    'Aplikasi "%s" baru diajukan dan menunggu verifikasi Anda.',
+                    $appName
+                );
+            });
+    }
+
+    private static function notifyRoles(self $model, array $entries, string $appName): void
+    {
+        foreach ($entries as $entry) {
+            User::query()
+                ->where('role', $entry['role'])
+                ->get(['id'])
+                ->each(function (User $user) use ($model, $entry, $appName): void {
+                    self::createNotification(
+                        $model,
+                        $user->getKey(),
+                        $entry['type'],
+                        $entry['title'],
+                        $entry['body'],
+                        $appName
+                    );
+                });
+        }
+    }
+
+    private static function notifyUnitKerjaForUat(self $model, string $status, string $appName): void
+    {
+        if ($status !== self::STATUS_UAT) {
+            return;
+        }
+
+        $creator = $model->creator()->select('id', 'role')->first();
+        $users = $creator?->isUnitKerja()
+            ? collect([$creator])
+            : User::query()->where('role', 'unit_kerja')->get(['id']);
+
+        $users->each(function (User $unitKerja) use ($model, $appName): void {
+            self::createNotification(
+                $model,
+                $unitKerja->getKey(),
+                'action_required',
+                'Aplikasi Siap UAT',
+                'Aplikasi "%s" siap diuji. Silakan unduh format UAT, lakukan pengujian, dan unggah dokumen hasil UAT.',
+                $appName
+            );
+        });
+    }
+
+    private static function notifyOwnerForStatus(self $model, string $status, string $appName): void
+    {
+        if (! $model->created_by) {
+            return;
+        }
+
+        $entry = match ($status) {
+            self::STATUS_PERLU_PERBAIKAN => [
+                'type' => 'action_required',
+                'title' => 'Pengajuan Perlu Perbaikan',
+                'body' => 'Pengajuan aplikasi "%s" memerlukan perbaikan sebelum dapat diproses lebih lanjut.',
+            ],
+            self::STATUS_DITOLAK => [
+                'type' => 'info',
+                'title' => 'Pengajuan Ditolak',
+                'body' => 'Pengajuan aplikasi "%s" telah ditolak. Silakan hubungi pengelola untuk informasi lebih lanjut.',
+            ],
+            self::STATUS_TERVERIFIKASI => [
+                'type' => 'info',
+                'title' => 'Pengajuan Terverifikasi',
+                'body' => 'Pengajuan aplikasi "%s" telah diverifikasi dan akan memasuki proses analisis desain.',
+            ],
+            self::STATUS_LAYAK => [
+                'type' => 'info',
+                'title' => 'Aplikasi Dinyatakan Layak',
+                'body' => 'Analisis desain aplikasi "%s" telah selesai, dinyatakan layak, dan akan memasuki tahap pengembangan.',
+            ],
+            self::STATUS_TIDAK_LAYAK => [
+                'type' => 'info',
+                'title' => 'Aplikasi Tidak Layak',
+                'body' => 'Aplikasi "%s" dinyatakan tidak layak setelah evaluasi studi kelayakan.',
+            ],
+            self::STATUS_DEPLOYED_PRODUCTION => [
+                'type' => 'info',
+                'title' => 'Aplikasi Anda Sudah Live!',
+                'body' => 'Selamat! Aplikasi "%s" telah berhasil dideploy dan kini dapat diakses pengguna.',
+            ],
+            self::STATUS_NONAKTIF => [
+                'type' => 'info',
+                'title' => 'Aplikasi Dinonaktifkan',
+                'body' => 'Aplikasi "%s" telah ditandai nonaktif dan tidak lagi digunakan.',
+            ],
+            default => null,
+        };
+
+        if ($entry !== null) {
+            self::createNotification(
+                $model,
+                $model->created_by,
+                $entry['type'],
+                $entry['title'],
+                $entry['body'],
+                $appName
+            );
+        }
+    }
+
+    private static function createNotification(
+        self $model,
+        mixed $userId,
+        string $type,
+        string $title,
+        string $body,
+        string $appName
+    ): void {
+        AppNotification::create([
+            'user_id' => $userId,
+            'aplikasi_id' => $model->getKey(),
+            'type' => $type,
+            'title' => $title,
+            'body' => sprintf($body, $appName),
+        ]);
     }
 
     /**

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENV_FILE="${1:-/etc/simpa-backup.env}"
 
-if [ ! -r "${ENV_FILE}" ]; then
+if [[ ! -r "${ENV_FILE}" ]]; then
     echo "Backup environment file is not readable: ${ENV_FILE}" >&2
     exit 1
 fi
@@ -34,7 +34,7 @@ trap cleanup EXIT
     echo "[client]"
     echo "user=${DB_USERNAME}"
     echo "password=${DB_PASSWORD}"
-    if [ -n "${DB_SOCKET:-}" ] && [ -S "${DB_SOCKET}" ]; then
+    if [[ -n "${DB_SOCKET:-}" ]] && [[ -S "${DB_SOCKET}" ]]; then
         echo "socket=${DB_SOCKET}"
     else
         echo "host=${DB_HOST:-127.0.0.1}"
@@ -43,7 +43,7 @@ trap cleanup EXIT
 } > "${DEFAULTS_FILE}"
 chmod 600 "${DEFAULTS_FILE}"
 
-if [ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]; then
+if [[ -n "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]]; then
     OUTPUT_PATH="${BASE_PATH}.enc"
     BACKUP_ENCRYPTION_PASSPHRASE="${BACKUP_ENCRYPTION_PASSPHRASE}" \
         mysqldump --defaults-extra-file="${DEFAULTS_FILE}" \

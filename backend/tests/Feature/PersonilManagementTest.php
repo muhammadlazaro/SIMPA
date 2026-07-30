@@ -10,6 +10,10 @@ class PersonilManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const PERSONIL_ENDPOINT = '/api/personil';
+
+    private const VALID_PASSWORD = 'Password#123';
+
     private function bearer(User $user): string
     {
         return 'Bearer '.$user->createToken('test')->plainTextToken;
@@ -20,11 +24,11 @@ class PersonilManagementTest extends TestCase
         $admin = User::factory()->adminSistem()->create();
 
         $create = $this->withHeader('Authorization', $this->bearer($admin))
-            ->postJson('/api/personil', [
+            ->postJson(self::PERSONIL_ENDPOINT, [
                 'name' => 'Petugas Unit Kerja',
                 'email' => 'unit.petugas@example.com',
-                'password' => 'Password#123',
-                'password_confirmation' => 'Password#123',
+                'password' => self::VALID_PASSWORD,
+                'password_confirmation' => self::VALID_PASSWORD,
                 'role' => 'unit_kerja',
             ]);
 
@@ -38,7 +42,7 @@ class PersonilManagementTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', $this->bearer($admin))
-            ->getJson('/api/personil?per_page=10&status=all')
+            ->getJson(self::PERSONIL_ENDPOINT.'?per_page=10&status=all')
             ->assertStatus(200)
             ->assertJsonPath('success', true)
             ->assertJsonStructure([
@@ -52,15 +56,15 @@ class PersonilManagementTest extends TestCase
         $pengelola = User::factory()->pengelola()->create();
 
         $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->getJson('/api/personil')
+            ->getJson(self::PERSONIL_ENDPOINT)
             ->assertStatus(403);
 
         $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->postJson('/api/personil', [
+            ->postJson(self::PERSONIL_ENDPOINT, [
                 'name' => 'Tidak Boleh',
                 'email' => 'tidak.boleh@example.com',
-                'password' => 'Password#123',
-                'password_confirmation' => 'Password#123',
+                'password' => self::VALID_PASSWORD,
+                'password_confirmation' => self::VALID_PASSWORD,
                 'role' => 'unit_kerja',
             ])
             ->assertStatus(403);
@@ -74,12 +78,12 @@ class PersonilManagementTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', $this->bearer($admin))
-            ->deleteJson('/api/personil/'.$admin->id)
+            ->deleteJson(self::PERSONIL_ENDPOINT.'/'.$admin->id)
             ->assertStatus(403)
             ->assertJsonPath('success', false);
 
         $this->withHeader('Authorization', $this->bearer($admin))
-            ->putJson('/api/personil/'.$admin->id, [
+            ->putJson(self::PERSONIL_ENDPOINT.'/'.$admin->id, [
                 'name' => 'Admin Sistem',
                 'email' => 'admin.sistem@example.com',
                 'role' => 'pengelola_aplikasi',
@@ -99,7 +103,7 @@ class PersonilManagementTest extends TestCase
         $this->assertSoftDeleted('users', ['id' => $target->id]);
 
         $this->withHeader('Authorization', $this->bearer($admin))
-            ->postJson('/api/personil/'.$target->id.'/restore')
+            ->postJson(self::PERSONIL_ENDPOINT.'/'.$target->id.'/restore')
             ->assertStatus(200)
             ->assertJsonPath('success', true);
 
@@ -122,7 +126,7 @@ class PersonilManagementTest extends TestCase
         $this->assertSoftDeleted('users', ['id' => $target->id]);
 
         $this->withHeader('Authorization', $this->bearer($admin))
-            ->deleteJson('/api/personil/'.$target->id.'/force')
+            ->deleteJson(self::PERSONIL_ENDPOINT.'/'.$target->id.'/force')
             ->assertStatus(200)
             ->assertJsonPath('success', true);
 

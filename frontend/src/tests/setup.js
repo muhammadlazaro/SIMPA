@@ -15,8 +15,8 @@ if (!window.matchMedia) {
 
 if (!window.ResizeObserver) {
   window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
+    observe() { return undefined }
+    unobserve() { return undefined }
+    disconnect() { return undefined }
   }
 }

@@ -184,54 +184,53 @@ async function confirmDeploy() {
   }
 }
 
-const availableActions = computed(() => {
-  const actions = []
-  const role = auth.role
-  const status = app.value?.status
-
-  if (role === 'unit_kerja' && status === 'perlu_perbaikan_pengajuan') {
-    actions.push({
+const ACTIONS_BY_ROLE_AND_STATUS = {
+  'unit_kerja:perlu_perbaikan_pengajuan': [
+    {
       label: 'Perbaiki Pengajuan',
       endpoint: '/workflow/perbaikan-pengajuan',
       btnClass: 'btn-primary',
       requiresNote: true,
-      noteLabel: 'Catatan Perbaikan'
-    })
-  } else if (role === 'pengelola_aplikasi' && status === 'diajukan') {
-    actions.push(
-      { label: 'Setujui Pengajuan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'terverifikasi' }, btnClass: 'btn-success', requiresNote: true },
-      { label: 'Minta Perbaikan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'perlu_perbaikan_pengajuan' }, btnClass: 'btn-warning', requiresNote: true },
-      { label: 'Tolak Pengajuan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'ditolak' }, btnClass: 'btn-danger', requiresNote: true }
-    )
-  } else if (role === 'analis_desain' && status === 'terverifikasi') {
-    actions.push({ label: 'Mulai Analisis Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false })
-  } else if (role === 'analis_desain' && status === 'analisa_desain') {
-    actions.push(
-      { label: 'Nyatakan Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: true }, btnClass: 'btn-success', requiresNote: true },
-      { label: 'Nyatakan Tidak Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: false }, btnClass: 'btn-danger', requiresNote: true }
-    )
-  } else if (role === 'tim_implementasi_aplikasi' && status === 'layak') {
-    actions.push({ label: 'Mulai Pengembangan', endpoint: '/workflow/mulai-pengembangan', btnClass: 'btn-primary', requiresNote: true })
-  } else if (role === 'tim_implementasi_aplikasi' && status === 'pengembangan') {
-    actions.push({ label: 'Tandai Siap UAT', endpoint: '/workflow/siap-uat', btnClass: 'btn-success', requiresNote: true })
-  } else if (role === 'pengelola_aplikasi' && status === 'uat') {
-    actions.push(
-      { label: 'UAT Sesuai', endpoint: '/workflow/verifikasi-uat', payload: { is_sesuai: true }, btnClass: 'btn-success', requiresNote: true },
-      { label: 'UAT Perlu Perbaikan', endpoint: '/workflow/verifikasi-uat', payload: { is_sesuai: false }, btnClass: 'btn-warning', requiresNote: true }
-    )
-  } else if (role === 'tim_implementasi_aplikasi' && status === 'perbaikan_uat') {
-    actions.push({ label: 'Selesai Perbaikan UAT', endpoint: '/workflow/selesai-perbaikan-uat', btnClass: 'btn-primary', requiresNote: true })
-  } else if (role === 'tim_uji_keamanan' && status === 'uji_keamanan') {
-    actions.push(
-      { label: 'Uji Keamanan Lolos', endpoint: '/workflow/hasil-uji-keamanan', payload: { is_lolos: true }, btnClass: 'btn-success', requiresNote: true },
-      { label: 'Uji Keamanan Tidak Lolos', endpoint: '/workflow/hasil-uji-keamanan', payload: { is_lolos: false }, btnClass: 'btn-danger', requiresNote: true }
-    )
-  } else if (role === 'tim_implementasi_aplikasi' && status === 'perbaikan_keamanan') {
-    actions.push({ label: 'Selesai Perbaikan Keamanan', endpoint: '/workflow/selesai-perbaikan-keamanan', btnClass: 'btn-primary', requiresNote: true })
-  }
-  // DevOps: tombol deploy dipindah ke Status Deployment section (sequential flow)
+      noteLabel: 'Catatan Perbaikan',
+    },
+  ],
+  'pengelola_aplikasi:diajukan': [
+    { label: 'Setujui Pengajuan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'terverifikasi' }, btnClass: 'btn-success', requiresNote: true },
+    { label: 'Minta Perbaikan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'perlu_perbaikan_pengajuan' }, btnClass: 'btn-warning', requiresNote: true },
+    { label: 'Tolak Pengajuan', endpoint: '/workflow/verifikasi-pengajuan', payload: { status_target: 'ditolak' }, btnClass: 'btn-danger', requiresNote: true },
+  ],
+  'analis_desain:terverifikasi': [
+    { label: 'Mulai Analisis Desain', endpoint: '/workflow/mulai-analisa-desain', btnClass: 'btn-primary', requiresNote: false },
+  ],
+  'analis_desain:analisa_desain': [
+    { label: 'Nyatakan Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: true }, btnClass: 'btn-success', requiresNote: true },
+    { label: 'Nyatakan Tidak Layak', endpoint: '/workflow/studi-kelayakan', payload: { is_layak: false }, btnClass: 'btn-danger', requiresNote: true },
+  ],
+  'tim_implementasi_aplikasi:layak': [
+    { label: 'Mulai Pengembangan', endpoint: '/workflow/mulai-pengembangan', btnClass: 'btn-primary', requiresNote: true },
+  ],
+  'tim_implementasi_aplikasi:pengembangan': [
+    { label: 'Tandai Siap UAT', endpoint: '/workflow/siap-uat', btnClass: 'btn-success', requiresNote: true },
+  ],
+  'pengelola_aplikasi:uat': [
+    { label: 'UAT Sesuai', endpoint: '/workflow/verifikasi-uat', payload: { is_sesuai: true }, btnClass: 'btn-success', requiresNote: true },
+    { label: 'UAT Perlu Perbaikan', endpoint: '/workflow/verifikasi-uat', payload: { is_sesuai: false }, btnClass: 'btn-warning', requiresNote: true },
+  ],
+  'tim_implementasi_aplikasi:perbaikan_uat': [
+    { label: 'Selesai Perbaikan UAT', endpoint: '/workflow/selesai-perbaikan-uat', btnClass: 'btn-primary', requiresNote: true },
+  ],
+  'tim_uji_keamanan:uji_keamanan': [
+    { label: 'Uji Keamanan Lolos', endpoint: '/workflow/hasil-uji-keamanan', payload: { is_lolos: true }, btnClass: 'btn-success', requiresNote: true },
+    { label: 'Uji Keamanan Tidak Lolos', endpoint: '/workflow/hasil-uji-keamanan', payload: { is_lolos: false }, btnClass: 'btn-danger', requiresNote: true },
+  ],
+  'tim_implementasi_aplikasi:perbaikan_keamanan': [
+    { label: 'Selesai Perbaikan Keamanan', endpoint: '/workflow/selesai-perbaikan-keamanan', btnClass: 'btn-primary', requiresNote: true },
+  ],
+}
 
-  return actions
+const availableActions = computed(() => {
+  const key = `${auth.role}:${app.value?.status || ''}`
+  return ACTIONS_BY_ROLE_AND_STATUS[key] || []
 })
 
 const workflowActionVisuals = {
@@ -1273,29 +1272,7 @@ const devopsData = computed(() => {
   }
 })
 
-// Filter proyek berdasarkan role user
-const filteredProyeks = computed(() => {
-  const allProyeks = devopsData.value.proyeks || []
-  const userRole = auth.role || 'tim_implementasi_aplikasi'
-  
-  // DevOps: tampilkan semua proyek
-  if (userRole === 'devops_developer') {
-    return allProyeks
-  }
-
-  // Tim implementasi: tampilkan semua proyek (frontend + backend)
-  if (userRole === 'tim_implementasi_aplikasi') {
-    return allProyeks
-  }
-
-  // Analis desain: pratinjau penuh modul (Frontend + Backend) dari data analisa
-  if (userRole === 'analis_desain' || props.analystMode) {
-    return allProyeks
-  }
-  
-  // Default: tampilkan semua (fallback)
-  return allProyeks
-})
+const filteredProyeks = computed(() => devopsData.value.proyeks || [])
 
 const TECHNICAL_CONFIG_TABS = [
   { id: 'proyek', label: 'Proyek', icon: 'code' },
@@ -1313,7 +1290,7 @@ const technicalConfigTabItems = TECHNICAL_CONFIG_TABS.map((tab) => ({
 
 function formatConfigKey(key) {
   return String(key || '')
-    .replace(/_/g, ' ')
+    .replaceAll('_', ' ')
     .replace(/\b\w/g, char => char.toUpperCase())
 }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Traits\HandlesAplikasiTransitions;
 use App\Http\Helpers\ApiResponse;
 use App\Http\Requests\StoreAplikasiChecklistRequest;
 use App\Http\Requests\StoreAplikasiNoteRequest;
@@ -14,13 +15,16 @@ use App\Models\User;
 use App\Support\AplikasiAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Http\Controllers\Traits\HandlesAplikasiTransitions;
 
 class AplikasiWorkflowController extends Controller
 {
     use HandlesAplikasiTransitions;
 
     private const ACCESS_DENIED_MESSAGE = 'Akses ditolak.';
+
+    private const CHECKLIST_NOT_FOUND_MESSAGE = 'Checklist tidak ditemukan';
+
+    private const CHECKLIST_STAGE_MESSAGE = 'Checklist implementasi belum dapat diubah pada tahap aplikasi saat ini.';
 
     private const IMPLEMENTATION_CATEGORY_BY_ROLE = [
         'tim_implementasi_aplikasi' => 'implementation_progress',
@@ -94,7 +98,7 @@ class AplikasiWorkflowController extends Controller
     public function updateChecklist(UpdateAplikasiChecklistRequest $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
         if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Checklist tidak ditemukan');
+            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
         }
 
         $payload = $request->validated();
@@ -105,10 +109,11 @@ class AplikasiWorkflowController extends Controller
 
         return ApiResponse::success(['checklist' => $checklist], 'Checklist berhasil diperbarui');
     }
+
     public function destroyChecklist(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
         if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Checklist tidak ditemukan');
+            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
         }
 
         $checklist->delete();
@@ -245,7 +250,7 @@ class AplikasiWorkflowController extends Controller
             return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
         if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
-            return ApiResponse::error('Checklist implementasi belum dapat diubah pada tahap aplikasi saat ini.', null, 422);
+            return ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
         }
 
         $payload = $request->validate([
@@ -276,7 +281,7 @@ class AplikasiWorkflowController extends Controller
     public function implementationUpdate(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
         if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Checklist tidak ditemukan');
+            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
         }
 
         $user = $request->user();
@@ -285,7 +290,7 @@ class AplikasiWorkflowController extends Controller
             return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
         if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
-            return ApiResponse::error('Checklist implementasi belum dapat diubah pada tahap aplikasi saat ini.', null, 422);
+            return ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
         }
 
         $payload = $request->validate([
@@ -304,7 +309,7 @@ class AplikasiWorkflowController extends Controller
     public function implementationDestroy(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
         if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Checklist tidak ditemukan');
+            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
         }
 
         $user = $request->user();
@@ -313,7 +318,7 @@ class AplikasiWorkflowController extends Controller
             return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
         if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
-            return ApiResponse::error('Checklist implementasi belum dapat diubah pada tahap aplikasi saat ini.', null, 422);
+            return ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
         }
 
         $checklist->delete();
@@ -363,13 +368,13 @@ class AplikasiWorkflowController extends Controller
         $aplikasi->save();
 
         $historyText = '';
-        if (!empty($payload['security_test_notes'])) {
-            $historyText .= "Ringkasan Hasil Uji:\n" . trim((string) $payload['security_test_notes']) . "\n\n";
+        if (! empty($payload['security_test_notes'])) {
+            $historyText .= "Ringkasan Hasil Uji:\n".trim((string) $payload['security_test_notes'])."\n\n";
         }
-        
+
         $noteBody = isset($payload['note']) ? trim((string) $payload['note']) : '';
         if ($noteBody !== '') {
-            $historyText .= "Catatan Perbaikan:\n" . $noteBody;
+            $historyText .= "Catatan Perbaikan:\n".$noteBody;
         }
 
         $historyText = trim($historyText);
@@ -477,12 +482,12 @@ class AplikasiWorkflowController extends Controller
         return ApiResponse::success([
             'deployment' => [
                 'staging' => [
-                    'deployed'    => $aplikasi->deployed_staging_at !== null,
+                    'deployed' => $aplikasi->deployed_staging_at !== null,
                     'deployed_at' => $aplikasi->deployed_staging_at,
                     'deployed_by' => $aplikasi->stagingDeployer,
                 ],
                 'production' => [
-                    'deployed'    => $aplikasi->deployed_production_at !== null,
+                    'deployed' => $aplikasi->deployed_production_at !== null,
                     'deployed_at' => $aplikasi->deployed_production_at,
                     'deployed_by' => $aplikasi->productionDeployer,
                 ],
@@ -499,68 +504,25 @@ class AplikasiWorkflowController extends Controller
     {
         $request->validate([
             'environment' => 'required|in:staging,production',
-            'deployed'    => 'required|boolean',
-            'notes'       => 'nullable|string|max:500',
+            'deployed' => 'required|boolean',
+            'notes' => 'nullable|string|max:500',
         ]);
 
         $userId = $request->user()?->getKey();
         $user = $request->user();
         $environment = $request->input('environment');
         $deployed = $request->boolean('deployed');
-        $statusTarget = null;
-        $historyAction = null;
-
-        if ($environment === 'staging') {
-            if ($deployed && ! in_array($aplikasi->getAttribute('status'), [
-                Aplikasi::STATUS_SIAP_DEPLOY,
-                Aplikasi::STATUS_DEPLOYED_STAGING,
-            ], true)) {
-                return ApiResponse::error(
-                    'Deployment staging hanya dapat dilakukan saat aplikasi berstatus siap deploy.',
-                    null,
-                    422
-                );
-            }
-
-            $aplikasi->deployed_staging_at = $deployed ? now() : null;
-            $aplikasi->deployed_staging_by = $deployed ? $userId : null;
-
-            if (
-                $deployed
-                && $aplikasi->status !== Aplikasi::STATUS_DEPLOYED_STAGING
-                && $aplikasi->status !== Aplikasi::STATUS_DEPLOYED_PRODUCTION
-            ) {
-                $statusTarget = Aplikasi::STATUS_DEPLOYED_STAGING;
-                $historyAction = 'Deployment ke Staging';
-            }
-        } else {
-            if ($deployed && ! in_array($aplikasi->getAttribute('status'), [
-                Aplikasi::STATUS_DEPLOYED_STAGING,
-                Aplikasi::STATUS_DEPLOYED_PRODUCTION,
-            ], true)) {
-                return ApiResponse::error(
-                    'Deployment production hanya dapat dilakukan setelah aplikasi berstatus deployed staging.',
-                    null,
-                    422
-                );
-            }
-
-            if ($deployed && $aplikasi->deployed_staging_at === null) {
-                return ApiResponse::error(
-                    'Deployment production hanya dapat dilakukan setelah staging selesai.',
-                    null,
-                    422
-                );
-            }
-
-            $aplikasi->deployed_production_at = $deployed ? now() : null;
-            $aplikasi->deployed_production_by = $deployed ? $userId : null;
-
-            if ($deployed && $aplikasi->status !== Aplikasi::STATUS_DEPLOYED_PRODUCTION) {
-                $statusTarget = Aplikasi::STATUS_DEPLOYED_PRODUCTION;
-                $historyAction = 'Deployment ke Production';
-            }
+        $constraintError = $this->deploymentConstraintError($aplikasi, $environment, $deployed);
+        if ($constraintError !== null) {
+            return ApiResponse::error($constraintError, null, 422);
         }
+
+        [$statusTarget, $historyAction] = $this->applyDeploymentState(
+            $aplikasi,
+            $environment,
+            $deployed,
+            $userId
+        );
 
         if ($request->filled('notes')) {
             $aplikasi->deployment_notes = $request->input('notes');
@@ -581,10 +543,66 @@ class AplikasiWorkflowController extends Controller
         \Illuminate\Support\Facades\Log::info('Deployment status updated', [
             'aplikasi_id' => $aplikasi->getKey(),
             'environment' => $environment,
-            'deployed'    => $deployed,
-            'user_id'     => $userId,
+            'deployed' => $deployed,
+            'user_id' => $userId,
         ]);
 
         return $this->deploymentShow($aplikasi->fresh());
+    }
+
+    private function deploymentConstraintError(Aplikasi $aplikasi, string $environment, bool $deployed): ?string
+    {
+        if (! $deployed) {
+            return null;
+        }
+
+        if ($environment === 'staging') {
+            return in_array($aplikasi->getAttribute('status'), [
+                Aplikasi::STATUS_SIAP_DEPLOY,
+                Aplikasi::STATUS_DEPLOYED_STAGING,
+            ], true)
+                ? null
+                : 'Deployment staging hanya dapat dilakukan saat aplikasi berstatus siap deploy.';
+        }
+
+        if (! in_array($aplikasi->getAttribute('status'), [
+            Aplikasi::STATUS_DEPLOYED_STAGING,
+            Aplikasi::STATUS_DEPLOYED_PRODUCTION,
+        ], true)) {
+            return 'Deployment production hanya dapat dilakukan setelah aplikasi berstatus deployed staging.';
+        }
+
+        return $aplikasi->deployed_staging_at === null
+            ? 'Deployment production hanya dapat dilakukan setelah staging selesai.'
+            : null;
+    }
+
+    private function applyDeploymentState(
+        Aplikasi $aplikasi,
+        string $environment,
+        bool $deployed,
+        mixed $userId
+    ): array {
+        if ($environment === 'staging') {
+            $aplikasi->deployed_staging_at = $deployed ? now() : null;
+            $aplikasi->deployed_staging_by = $deployed ? $userId : null;
+
+            $shouldAdvance = $deployed
+                && ! in_array($aplikasi->status, [
+                    Aplikasi::STATUS_DEPLOYED_STAGING,
+                    Aplikasi::STATUS_DEPLOYED_PRODUCTION,
+                ], true);
+
+            return $shouldAdvance
+                ? [Aplikasi::STATUS_DEPLOYED_STAGING, 'Deployment ke Staging']
+                : [null, null];
+        }
+
+        $aplikasi->deployed_production_at = $deployed ? now() : null;
+        $aplikasi->deployed_production_by = $deployed ? $userId : null;
+
+        return $deployed && $aplikasi->status !== Aplikasi::STATUS_DEPLOYED_PRODUCTION
+            ? [Aplikasi::STATUS_DEPLOYED_PRODUCTION, 'Deployment ke Production']
+            : [null, null];
     }
 }

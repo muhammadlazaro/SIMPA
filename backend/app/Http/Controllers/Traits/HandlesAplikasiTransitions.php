@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 trait HandlesAplikasiTransitions
 {
+    private const TRANSITION_ACCESS_DENIED_MESSAGE = 'Akses ditolak.';
+
     private function recordStatusHistory(Aplikasi $aplikasi, string $aksi, string $statusBaru, ?string $catatan, $user): void
     {
         $statusSebelumnya = $aplikasi->status;
@@ -30,12 +32,16 @@ trait HandlesAplikasiTransitions
     public function verifikasiPengajuan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'pengelola_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_DIAJUKAN) return ApiResponse::error('Aplikasi tidak dalam status diajukan.');
+        if ($user->role !== 'pengelola_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_DIAJUKAN) {
+            return ApiResponse::error('Aplikasi tidak dalam status diajukan.');
+        }
 
         $request->validate([
-            'status_target' => 'required|string|in:' . Aplikasi::STATUS_TERVERIFIKASI . ',' . Aplikasi::STATUS_PERLU_PERBAIKAN . ',' . Aplikasi::STATUS_DITOLAK,
-            'catatan' => 'required|string'
+            'status_target' => 'required|string|in:'.Aplikasi::STATUS_TERVERIFIKASI.','.Aplikasi::STATUS_PERLU_PERBAIKAN.','.Aplikasi::STATUS_DITOLAK,
+            'catatan' => 'required|string',
         ]);
 
         $statusBaru = $request->input('status_target');
@@ -51,23 +57,32 @@ trait HandlesAplikasiTransitions
     public function perbaikanPengajuan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'unit_kerja') return ApiResponse::forbidden('Akses ditolak.');
+        if ($user->role !== 'unit_kerja') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
         if ((int) $aplikasi->getAttribute('created_by') !== (int) $user->getKey()) {
             return ApiResponse::forbidden('Anda hanya dapat memperbaiki pengajuan milik sendiri.');
         }
-        if ($aplikasi->status !== Aplikasi::STATUS_PERLU_PERBAIKAN) return ApiResponse::error('Aplikasi tidak dalam status perlu perbaikan pengajuan.');
+        if ($aplikasi->status !== Aplikasi::STATUS_PERLU_PERBAIKAN) {
+            return ApiResponse::error('Aplikasi tidak dalam status perlu perbaikan pengajuan.');
+        }
 
         $request->validate(['catatan' => 'nullable|string']);
 
         $this->recordStatusHistory($aplikasi, 'Kirim Ulang Pengajuan', Aplikasi::STATUS_DIAJUKAN, $request->input('catatan', 'Pengajuan telah diperbaiki'), $user);
+
         return ApiResponse::success(['status' => Aplikasi::STATUS_DIAJUKAN], 'Pengajuan dikirim ulang.');
     }
 
     public function studiKelayakan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'analis_desain') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Analisis desain belum dimulai.');
+        if ($user->role !== 'analis_desain') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) {
+            return ApiResponse::error('Analisis desain belum dimulai.');
+        }
 
         $request->validate(['is_layak' => 'required|boolean', 'catatan' => 'required|string']);
 
@@ -85,20 +100,29 @@ trait HandlesAplikasiTransitions
     public function mulaiAnalisaDesain(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'analis_desain') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_TERVERIFIKASI && $aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) return ApiResponse::error('Status tidak sesuai.');
+        if ($user->role !== 'analis_desain') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_TERVERIFIKASI && $aplikasi->status !== Aplikasi::STATUS_ANALISA_DESAIN) {
+            return ApiResponse::error('Status tidak sesuai.');
+        }
 
         if ($aplikasi->status === Aplikasi::STATUS_TERVERIFIKASI) {
             $this->recordStatusHistory($aplikasi, 'Mulai Analisa Desain', Aplikasi::STATUS_ANALISA_DESAIN, 'Analis mulai bekerja', $user);
         }
+
         return ApiResponse::success(['status' => Aplikasi::STATUS_ANALISA_DESAIN]);
     }
 
     public function mulaiPengembangan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'tim_implementasi_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_LAYAK) return ApiResponse::error('Status tidak sesuai.');
+        if ($user->role !== 'tim_implementasi_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_LAYAK) {
+            return ApiResponse::error('Status tidak sesuai.');
+        }
         if (! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::LaporanAnalisaDesain)) {
             return ApiResponse::error('Laporan analisa desain wajib diunggah sebelum pengembangan dimulai.', null, 422);
         }
@@ -112,8 +136,12 @@ trait HandlesAplikasiTransitions
     public function siapUat(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'tim_implementasi_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_PENGEMBANGAN) return ApiResponse::error('Aplikasi belum dalam pengembangan.');
+        if ($user->role !== 'tim_implementasi_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_PENGEMBANGAN) {
+            return ApiResponse::error('Aplikasi belum dalam pengembangan.');
+        }
         if (! $this->implementationChecklistComplete($aplikasi)) {
             return ApiResponse::error('Checklist implementasi wajib diselesaikan sebelum aplikasi ditandai siap UAT.', null, 422);
         }
@@ -133,8 +161,12 @@ trait HandlesAplikasiTransitions
     public function verifikasiUat(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'pengelola_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_UAT) return ApiResponse::error('Status tidak sesuai untuk verifikasi UAT.');
+        if ($user->role !== 'pengelola_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_UAT) {
+            return ApiResponse::error('Status tidak sesuai untuk verifikasi UAT.');
+        }
 
         $request->validate(['is_sesuai' => 'required|boolean', 'catatan' => 'required|string']);
         if ($request->boolean('is_sesuai') && ! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::Uat)) {
@@ -150,8 +182,12 @@ trait HandlesAplikasiTransitions
     public function selesaiPerbaikanUat(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'tim_implementasi_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_PERBAIKAN_UAT) return ApiResponse::error('Status bukan perbaikan UAT.');
+        if ($user->role !== 'tim_implementasi_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_PERBAIKAN_UAT) {
+            return ApiResponse::error('Status bukan perbaikan UAT.');
+        }
 
         $request->validate(['catatan' => 'required|string']);
         $this->recordStatusHistory($aplikasi, 'Perbaikan UAT Selesai', Aplikasi::STATUS_UAT, $request->input('catatan'), $user);
@@ -162,7 +198,9 @@ trait HandlesAplikasiTransitions
     public function hasilUjiKeamanan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'tim_uji_keamanan') return ApiResponse::forbidden('Akses ditolak.');
+        if ($user->role !== 'tim_uji_keamanan') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
 
         $payload = $request->validate([
             'is_lolos' => ['required', 'boolean'],
@@ -237,8 +275,12 @@ trait HandlesAplikasiTransitions
     public function selesaiPerbaikanKeamanan(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
-        if ($user->role !== 'tim_implementasi_aplikasi') return ApiResponse::forbidden('Akses ditolak.');
-        if ($aplikasi->status !== Aplikasi::STATUS_PERBAIKAN_KEAMANAN) return ApiResponse::error('Status bukan perbaikan keamanan.');
+        if ($user->role !== 'tim_implementasi_aplikasi') {
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
+        }
+        if ($aplikasi->status !== Aplikasi::STATUS_PERBAIKAN_KEAMANAN) {
+            return ApiResponse::error('Status bukan perbaikan keamanan.');
+        }
 
         $request->validate(['catatan' => 'required|string']);
         $aplikasi->security_test_passed = null;
@@ -262,10 +304,11 @@ trait HandlesAplikasiTransitions
     public function statusHistories(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         if (! $this->canAccessWorkflowAplikasi($aplikasi, $request->user())) {
-            return ApiResponse::forbidden('Akses ditolak.');
+            return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
         }
 
         $histories = $aplikasi->statusHistories()->with('changer:id,name')->orderBy('id', 'desc')->get();
+
         return ApiResponse::success(['histories' => $histories]);
     }
 

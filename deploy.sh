@@ -60,7 +60,7 @@ check_mysql_login() {
     local database="$3"
     local mysql_args=()
 
-    if [ -S "${DB_SOCKET}" ]; then
+    if [[ -S "${DB_SOCKET}" ]]; then
         mysql_args+=(--socket="${DB_SOCKET}")
     else
         mysql_args+=(--host=127.0.0.1 --port=3306)
@@ -170,12 +170,12 @@ echo "3/7 Syncing repository..."
 sudo mkdir -p "$(dirname "${APP_DIR}")"
 sudo chown -R "$USER:$USER" "$(dirname "${APP_DIR}")"
 
-if [ -d "${APP_DIR}/.git" ]; then
+if [[ -d "${APP_DIR}/.git" ]]; then
     cd "${APP_DIR}"
     git fetch origin "${BRANCH}"
     git checkout "${BRANCH}"
     git pull --ff-only origin "${BRANCH}"
-elif [ -d "${APP_DIR}" ] && [ "$(find "${APP_DIR}" -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]; then
+elif [[ -d "${APP_DIR}" ]] && [[ "$(find "${APP_DIR}" -mindepth 1 -maxdepth 1 | wc -l)" -gt 0 ]]; then
     echo "ERROR: ${APP_DIR} exists but is not a git repository."
     echo "Move it away or convert it to a git checkout before deploying."
     exit 1
@@ -187,7 +187,7 @@ fi
 echo "4/7 Setting up backend..."
 cd "${APP_DIR}/backend"
 
-if [ ! -f .env ]; then
+if [[ ! -f .env ]]; then
     cp .env.example .env
 fi
 
@@ -225,7 +225,7 @@ set_env_value "LOG_STACK" "${LOG_STACK}"
 set_env_value "LOG_LEVEL" "${LOG_LEVEL}"
 set_env_value "LOG_DAILY_DAYS" "${LOG_DAILY_DAYS}"
 set_env_value "DB_CONNECTION" "mysql"
-if [ -S "${DB_SOCKET}" ]; then
+if [[ -S "${DB_SOCKET}" ]]; then
     set_env_value "DB_HOST" "localhost"
     set_env_value "DB_SOCKET" "${DB_SOCKET}"
 else
@@ -237,7 +237,7 @@ set_env_value "DB_DATABASE" "${DB_DATABASE}"
 set_env_value "DB_USERNAME" "${DB_RUNTIME_USERNAME}"
 set_env_value "DB_PASSWORD" "${DB_RUNTIME_PASSWORD}"
 
-if [ -n "${MYSQL_ATTR_SSL_CA}" ]; then
+if [[ -n "${MYSQL_ATTR_SSL_CA}" ]]; then
     set_env_value "MYSQL_ATTR_SSL_CA" "${MYSQL_ATTR_SSL_CA}"
 fi
 
@@ -266,7 +266,7 @@ if ! php artisan migrate --force; then
 fi
 restore_runtime_app_privileges
 
-if [ "${RUN_SEED}" = "true" ]; then
+if [[ "${RUN_SEED}" = "true" ]]; then
     php artisan db:seed --force
 fi
 
@@ -292,7 +292,7 @@ VITE_DEBUG=false
 VITE_API_TIMEOUT=30000
 EOF
 
-if [ -f package-lock.json ]; then
+if [[ -f package-lock.json ]]; then
     npm ci --ignore-scripts
 else
     npm install --ignore-scripts
@@ -300,7 +300,7 @@ fi
 npm run build
 
 echo "6/7 Configuring Nginx..."
-if [ "${ENABLE_ORIGIN_TLS}" = "true" ]; then
+if [[ "${ENABLE_ORIGIN_TLS}" = "true" ]]; then
     if ! sudo test -r "${TLS_CERT_PATH}" || ! sudo test -r "${TLS_KEY_PATH}"; then
         echo "ERROR: ENABLE_ORIGIN_TLS=true but TLS cert/key is not readable."
         echo "Expected cert: ${TLS_CERT_PATH}"
@@ -431,13 +431,13 @@ server {
 EOF
 fi
 
-if [ -f "/etc/nginx/sites-enabled/default" ]; then
+if [[ -f "/etc/nginx/sites-enabled/default" ]]; then
     sudo rm -f /etc/nginx/sites-enabled/default
 fi
 sudo ln -sf /etc/nginx/sites-available/simpa /etc/nginx/sites-enabled/simpa
 sudo nginx -t
 
-if [ "${ENABLE_DB_BACKUP}" = "true" ]; then
+if [[ "${ENABLE_DB_BACKUP}" = "true" ]]; then
     echo "Configuring MySQL backup timer..."
     sudo install -m 0750 -o root -g root "${APP_DIR}/ops/mysql-backup.sh" /usr/local/sbin/simpa-mysql-backup
     sudo install -d -m 0700 -o root -g root "${BACKUP_DIR}"

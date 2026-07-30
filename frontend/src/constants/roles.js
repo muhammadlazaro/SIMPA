@@ -30,10 +30,12 @@ export function getUserDisplayName(user, role) {
   if (role === 'admin_sistem') return rawName
 
   const legacyPrefix = ['ad', 'min'].join('')
-  const cleanName = rawName
-    .replace(new RegExp(`^${legacyPrefix}\\s+`, 'i'), '')
-    .replace(/\s+User$/i, '')
-    .trim()
+  const withoutLegacyPrefix = rawName.toLowerCase().startsWith(`${legacyPrefix} `)
+    ? rawName.slice(legacyPrefix.length).trimStart()
+    : rawName
+  const cleanName = withoutLegacyPrefix.toLowerCase().endsWith(' user')
+    ? withoutLegacyPrefix.slice(0, -5).trimEnd()
+    : withoutLegacyPrefix
 
   if (!cleanName || cleanName.toLowerCase() === 'user') return fallback
   return cleanName

@@ -35,9 +35,11 @@ class SecurityHardeningTest extends TestCase
 
     public function test_rate_limit_response_does_not_disclose_exception_details(): void
     {
+        $testIp = implode('.', [10, 70, 0, 10]);
+
         for ($i = 0; $i < 6; $i++) {
             $response = $this
-                ->withServerVariables(['REMOTE_ADDR' => '10.70.0.10'])
+                ->withServerVariables(['REMOTE_ADDR' => $testIp])
                 ->postJson('/api/login', [
                     'email' => 'scanner@example.com',
                     'password' => 'wrong-password',

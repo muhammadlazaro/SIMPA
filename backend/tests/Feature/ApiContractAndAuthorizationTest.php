@@ -14,6 +14,14 @@ class ApiContractAndAuthorizationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const RFC_ENDPOINT = '/api/rfc';
+
+    private const RFC_ASSIGNEE = 'Internal Pusdatik';
+
+    private const RFC_STATUS = 'Analisa Desain';
+
+    private const PDF_MIME = 'application/pdf';
+
     private function bearer(User $user): string
     {
         return 'Bearer '.$user->createToken('test')->plainTextToken;
@@ -46,13 +54,13 @@ class ApiContractAndAuthorizationTest extends TestCase
         $aplikasi = Aplikasi::factory()->create();
 
         $create = $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'Perubahan kecil',
-                'pelaksana' => 'Internal Pusdatik',
-                'status_tindaklanjut' => 'Analisa Desain',
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, 'application/pdf'),
+                'pelaksana' => self::RFC_ASSIGNEE,
+                'status_tindaklanjut' => self::RFC_STATUS,
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, self::PDF_MIME),
             ]);
 
         $create->assertStatus(201)
@@ -62,7 +70,7 @@ class ApiContractAndAuthorizationTest extends TestCase
         $rfcId = (int) $create->json('data.id');
 
         $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->patchJson("/api/rfc/{$rfcId}", [
+            ->patchJson(self::RFC_ENDPOINT."/{$rfcId}", [
                 'deskripsi' => 'Perubahan kecil - revisi',
             ])
             ->assertStatus(200)
@@ -70,7 +78,7 @@ class ApiContractAndAuthorizationTest extends TestCase
             ->assertJsonPath('data.deskripsi', 'Perubahan kecil - revisi');
 
         $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->deleteJson("/api/rfc/{$rfcId}")
+            ->deleteJson(self::RFC_ENDPOINT."/{$rfcId}")
             ->assertStatus(200)
             ->assertJsonPath('success', true);
 
@@ -90,18 +98,18 @@ class ApiContractAndAuthorizationTest extends TestCase
             'aplikasi_id' => $aplikasi->id,
             'tipe_rfc' => 'Standar',
             'deskripsi' => 'RFC yang masih berjalan.',
-            'pelaksana' => 'Internal Pusdatik',
+            'pelaksana' => self::RFC_ASSIGNEE,
             'status_tindaklanjut' => Rfc::STATUS_ANALISA_DESAIN,
         ]);
 
         $response = $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'RFC kedua untuk aplikasi yang sama.',
-                'pelaksana' => 'Internal Pusdatik',
+                'pelaksana' => self::RFC_ASSIGNEE,
                 'status_tindaklanjut' => Rfc::STATUS_DIAJUKAN,
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc-2.pdf', 128, 'application/pdf'),
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc-2.pdf', 128, self::PDF_MIME),
             ]);
 
         $response->assertStatus(422)
@@ -117,12 +125,12 @@ class ApiContractAndAuthorizationTest extends TestCase
         $aplikasi = Aplikasi::factory()->create();
 
         $response = $this->withHeader('Authorization', $this->bearer($developer))
-            ->postJson('/api/rfc', [
+            ->postJson(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'Tidak boleh',
-                'pelaksana' => 'Internal Pusdatik',
-                'status_tindaklanjut' => 'Analisa Desain',
+                'pelaksana' => self::RFC_ASSIGNEE,
+                'status_tindaklanjut' => self::RFC_STATUS,
             ]);
 
         $response->assertStatus(403)
@@ -140,11 +148,11 @@ class ApiContractAndAuthorizationTest extends TestCase
         $aplikasi = Aplikasi::factory()->production()->create(['created_by' => $unitKerja->id]);
 
         $response = $this->withHeader('Authorization', $this->bearer($unitKerja))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'Mohon perubahan fitur laporan.',
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, 'application/pdf'),
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, self::PDF_MIME),
             ]);
 
         $response->assertStatus(201)
@@ -177,11 +185,11 @@ class ApiContractAndAuthorizationTest extends TestCase
         $aplikasi = Aplikasi::factory()->production()->create(['created_by' => $otherUnit->id]);
 
         $response = $this->withHeader('Authorization', $this->bearer($unitKerja))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'Tidak boleh mengubah aplikasi unit lain.',
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, 'application/pdf'),
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, self::PDF_MIME),
             ]);
 
         $response->assertStatus(403)
@@ -201,11 +209,11 @@ class ApiContractAndAuthorizationTest extends TestCase
         ]);
 
         $response = $this->withHeader('Authorization', $this->bearer($unitKerja))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => 'Belum boleh diajukan sebagai RFC.',
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, 'application/pdf'),
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, self::PDF_MIME),
             ]);
 
         $response->assertStatus(422)
@@ -238,7 +246,7 @@ class ApiContractAndAuthorizationTest extends TestCase
         ]);
 
         $response = $this->withHeader('Authorization', $this->bearer($unitKerja))
-            ->getJson('/api/rfc');
+            ->getJson(self::RFC_ENDPOINT);
 
         $response->assertStatus(200)
             ->assertJsonPath('success', true)
@@ -246,7 +254,7 @@ class ApiContractAndAuthorizationTest extends TestCase
             ->assertJsonPath('data.0.id', $ownRfc->id);
 
         $this->withHeader('Authorization', $this->bearer($unitKerja))
-            ->getJson('/api/rfc/stats')
+            ->getJson(self::RFC_ENDPOINT.'/stats')
             ->assertStatus(200)
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.total', 1)
@@ -261,13 +269,13 @@ class ApiContractAndAuthorizationTest extends TestCase
         $aplikasi = Aplikasi::factory()->create();
 
         $response = $this->withHeader('Authorization', $this->bearer($pengelola))
-            ->post('/api/rfc', [
+            ->post(self::RFC_ENDPOINT, [
                 'aplikasi_id' => $aplikasi->id,
                 'tipe_rfc' => 'Minor',
                 'deskripsi' => str_repeat('A', 5001),
-                'pelaksana' => 'Internal Pusdatik',
-                'status_tindaklanjut' => 'Analisa Desain',
-                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, 'application/pdf'),
+                'pelaksana' => self::RFC_ASSIGNEE,
+                'status_tindaklanjut' => self::RFC_STATUS,
+                'formulir_rfc' => UploadedFile::fake()->create('formulir-rfc.pdf', 128, self::PDF_MIME),
             ]);
 
         $response->assertStatus(422)

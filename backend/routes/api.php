@@ -1,16 +1,16 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use App\Enums\UserRole;
-use App\Http\Controllers\AplikasiController;
-use App\Http\Controllers\AplikasiWorkflowController;
-use App\Http\Controllers\AplikasiDocumentController;
 use App\Http\Controllers\AnalisaDesainController;
+use App\Http\Controllers\AplikasiController;
+use App\Http\Controllers\AplikasiDocumentController;
+use App\Http\Controllers\AplikasiWorkflowController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PersonilController;
 use App\Http\Controllers\RfcController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 // API root endpoint (browser/manual check)
 Route::get('/', function () {
@@ -37,7 +37,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     $analisaDesainIdPath = 'analisa-desain/{id}';
     $rfcIdPath = 'rfc/{id}';
     $securityReviewPath = 'aplikasi/{aplikasi}/security-review';
-    
+
     // Auth routes (available for all authenticated users)
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
@@ -45,14 +45,15 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
 
     // Admin Sistem: personil and access management
     Route::middleware('role:'.UserRole::ADMIN_SISTEM->value)->group(function () {
-        Route::get('personil/stats', [PersonilController::class, 'stats']);
-        Route::get('personil', [PersonilController::class, 'index']);
-        Route::post('personil', [PersonilController::class, 'store']);
-        Route::put('personil/{id}', [PersonilController::class, 'update']);
-        Route::patch('personil/{id}', [PersonilController::class, 'update']);
-        Route::delete('personil/{id}', [PersonilController::class, 'destroy']);
-        Route::delete('personil/{id}/force', [PersonilController::class, 'forceDestroy']);
-        Route::post('personil/{id}/restore', [PersonilController::class, 'restore']);
+        Route::prefix('personil')->group(function () {
+            Route::get('stats', [PersonilController::class, 'stats']);
+            Route::get('', [PersonilController::class, 'index']);
+            Route::post('', [PersonilController::class, 'store']);
+            Route::match(['put', 'patch'], '{id}', [PersonilController::class, 'update']);
+            Route::delete('{id}', [PersonilController::class, 'destroy']);
+            Route::delete('{id}/force', [PersonilController::class, 'forceDestroy']);
+            Route::post('{id}/restore', [PersonilController::class, 'restore']);
+        });
     });
 
     // Notifikasi in-app (semua role yang sudah login)
@@ -73,19 +74,20 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         .UserRole::DEVOPS_DEVELOPER->value.','
         .UserRole::TIM_UJI_KEAMANAN->value
     )->group(function () {
-        Route::get('aplikasi/{aplikasi}/documents', [AplikasiDocumentController::class, 'index']);
-        Route::post('aplikasi/{aplikasi}/documents', [AplikasiDocumentController::class, 'store']);
-        Route::get('aplikasi/{aplikasi}/documents/{document}/preview', [AplikasiDocumentController::class, 'preview'])
-            ->name('aplikasi.documents.preview');
-        
-        // Notes can be added by any role participating in the app
-        Route::post('aplikasi/{aplikasi}/notes', [AplikasiWorkflowController::class, 'storeNote']);
-        Route::put('aplikasi/{aplikasi}/notes/{note}', [AplikasiWorkflowController::class, 'updateNote']);
-        Route::patch('aplikasi/{aplikasi}/notes/{note}', [AplikasiWorkflowController::class, 'updateNote']);
-        Route::delete('aplikasi/{aplikasi}/notes/{note}', [AplikasiWorkflowController::class, 'destroyNote']);
-        
-        // Workflow data (including notes history and checklists) can be viewed by all roles
-        Route::get('aplikasi/{aplikasi}/workflow', [AplikasiWorkflowController::class, 'index']);
+        Route::prefix('aplikasi/{aplikasi}')->group(function () {
+            Route::get('documents', [AplikasiDocumentController::class, 'index']);
+            Route::post('documents', [AplikasiDocumentController::class, 'store']);
+            Route::get('documents/{document}/preview', [AplikasiDocumentController::class, 'preview'])
+                ->name('aplikasi.documents.preview');
+
+            // Notes can be added by any role participating in the app
+            Route::post('notes', [AplikasiWorkflowController::class, 'storeNote']);
+            Route::match(['put', 'patch'], 'notes/{note}', [AplikasiWorkflowController::class, 'updateNote']);
+            Route::delete('notes/{note}', [AplikasiWorkflowController::class, 'destroyNote']);
+
+            // Workflow data (including notes history and checklists) can be viewed by all roles
+            Route::get('workflow', [AplikasiWorkflowController::class, 'index']);
+        });
     });
     Route::get($aplikasiIdPath, [AplikasiController::class, 'show']);
     Route::get('analisa-desain/summary', [AnalisaDesainController::class, 'summary']);
@@ -94,7 +96,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     Route::get('rfc', [RfcController::class, 'index']);
     Route::get('rfc/stats', [RfcController::class, 'stats']);
     Route::get($rfcIdPath, [RfcController::class, 'show']);
-    
+
     // Unit kerja dan pengelola aplikasi sama-sama bisa mengajukan aplikasi baru
     Route::post('aplikasi', [AplikasiController::class, 'store'])->middleware(
         'role:'.UserRole::PENGELOLA_APLIKASI->value.','.UserRole::UNIT_KERJA->value
@@ -112,7 +114,6 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     // Pengelola aplikasi routes (Aplikasi Management and RFC)
     Route::middleware('role:'.UserRole::PENGELOLA_APLIKASI->value)->group(function () use (
         $aplikasiIdPath,
-        $analisaDesainIdPath,
         $rfcIdPath
     ) {
         // Aplikasi Management
@@ -131,12 +132,13 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
 
     // Analis desain mengelola checklist kelayakan/analisa pada halaman detail analisa.
     Route::middleware('role:'.UserRole::ANALIS_DESAIN->value)->group(function () {
-        Route::post('aplikasi/{aplikasi}/checklists', [AplikasiWorkflowController::class, 'storeChecklist']);
-        Route::put('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
-        Route::patch('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
-        Route::delete('aplikasi/{aplikasi}/checklists/{checklist}', [AplikasiWorkflowController::class, 'destroyChecklist']);
+        Route::prefix('aplikasi/{aplikasi}/checklists')->group(function () {
+            Route::post('', [AplikasiWorkflowController::class, 'storeChecklist']);
+            Route::match(['put', 'patch'], '{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
+            Route::delete('{checklist}', [AplikasiWorkflowController::class, 'destroyChecklist']);
+        });
     });
-    
+
     // Analisa Desain — akses bersama pengelola_aplikasi dan analis_desain
     Route::middleware('role:'
         .UserRole::PENGELOLA_APLIKASI->value.','
@@ -155,11 +157,12 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         .UserRole::TIM_IMPLEMENTASI_APLIKASI->value.','
         .UserRole::DEVOPS_DEVELOPER->value
     )->group(function () {
-        Route::get('aplikasi/{aplikasi}/implementation-checklists', [AplikasiWorkflowController::class, 'implementationIndex']);
-        Route::post('aplikasi/{aplikasi}/implementation-checklists', [AplikasiWorkflowController::class, 'implementationStore']);
-        Route::put('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
-        Route::patch('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
-        Route::delete('aplikasi/{aplikasi}/implementation-checklists/{checklist}', [AplikasiWorkflowController::class, 'implementationDestroy']);
+        Route::prefix('aplikasi/{aplikasi}/implementation-checklists')->group(function () {
+            Route::get('', [AplikasiWorkflowController::class, 'implementationIndex']);
+            Route::post('', [AplikasiWorkflowController::class, 'implementationStore']);
+            Route::match(['put', 'patch'], '{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
+            Route::delete('{checklist}', [AplikasiWorkflowController::class, 'implementationDestroy']);
+        });
     });
 
     // Tim Uji Keamanan
@@ -175,15 +178,13 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     });
 
     // DevOps — Deployment status tracking
-    Route::middleware('role:'
-        .UserRole::PENGELOLA_APLIKASI->value.','
-        .UserRole::DEVOPS_DEVELOPER->value
-    )->group(function () {
-        Route::get('aplikasi/{aplikasi}/deployment-status', [AplikasiWorkflowController::class, 'deploymentShow']);
-    });
-    Route::middleware('role:'.UserRole::DEVOPS_DEVELOPER->value)->group(function () {
-        Route::put('aplikasi/{aplikasi}/deployment-status', [AplikasiWorkflowController::class, 'deploymentUpdate']);
-        Route::patch('aplikasi/{aplikasi}/deployment-status', [AplikasiWorkflowController::class, 'deploymentUpdate']);
+    Route::prefix('aplikasi/{aplikasi}/deployment-status')->group(function () {
+        Route::get('', [AplikasiWorkflowController::class, 'deploymentShow'])
+            ->middleware('role:'
+                .UserRole::PENGELOLA_APLIKASI->value.','
+                .UserRole::DEVOPS_DEVELOPER->value);
+        Route::match(['put', 'patch'], '', [AplikasiWorkflowController::class, 'deploymentUpdate'])
+            ->middleware('role:'.UserRole::DEVOPS_DEVELOPER->value);
     });
 
     // Workflow Transitions

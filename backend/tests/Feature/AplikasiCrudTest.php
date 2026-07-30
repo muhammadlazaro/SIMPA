@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
 use App\Models\Aplikasi;
 use App\Models\AplikasiDocument;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -15,11 +15,34 @@ class AplikasiCrudTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const APLIKASI_ENDPOINT = '/api/aplikasi';
+
+    private const APLIKASI_STATS_ENDPOINT = '/api/aplikasi/stats';
+
+    private const PENGELOLA_NOTIFICATIONS_ENDPOINT = '/api/aplikasi/pengelola-notifications';
+
+    private const TEST_SERVICE_NAME = 'Test Layanan';
+
+    private const TEST_APPLICATION_NAME = 'Test App';
+
+    private const PDF_MIME_TYPE = 'application/pdf';
+
+    private const LEGACY_DOCUMENT_PATH = 'legacy/pengajuan.pdf';
+
+    private const APPLICATION_DOCUMENT_PATH = 'documents/formulir.pdf';
+
+    private const RFC_DOCUMENT_PATH = 'rfc_documents/formulir-rfc.pdf';
+
     protected $pengelolaUser;
+
     protected $readerUser;
+
     protected $unitKerjaUser;
+
     protected $pengelolaToken;
+
     protected $readerToken;
+
     protected $unitKerjaToken;
 
     protected function setUp(): void
@@ -46,11 +69,11 @@ class AplikasiCrudTest extends TestCase
     {
         Storage::fake('public');
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-            ->post('/api/aplikasi', [
-                'nama_layanan' => 'Test Layanan',
+        $response = $this->withToken($this->pengelolaToken)
+            ->post(self::APLIKASI_ENDPOINT, [
+                'nama_layanan' => self::TEST_SERVICE_NAME,
                 'nama_singkat' => 'TL',
-                'nama_aplikasi' => 'Test App',
+                'nama_aplikasi' => self::TEST_APPLICATION_NAME,
                 'jenis_layanan_aplikasi' => 'publik',
                 'kode_unitOrganisasi' => 'TEST001',
                 'tipe_akuisisi' => 'Custom-Made',
@@ -65,8 +88,8 @@ class AplikasiCrudTest extends TestCase
             ]);
 
         $this->assertDatabaseHas('aplikasis', [
-            'nama_aplikasi' => 'Test App',
-            'nama_layanan' => 'Test Layanan',
+            'nama_aplikasi' => self::TEST_APPLICATION_NAME,
+            'nama_layanan' => self::TEST_SERVICE_NAME,
             'status' => 'diajukan',
         ]);
     }
@@ -76,11 +99,11 @@ class AplikasiCrudTest extends TestCase
      */
     public function test_user_cannot_create_aplikasi(): void
     {
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->readerToken)
-            ->postJson('/api/aplikasi', [
-                'nama_layanan' => 'Test Layanan',
+        $response = $this->withToken($this->readerToken)
+            ->postJson(self::APLIKASI_ENDPOINT, [
+                'nama_layanan' => self::TEST_SERVICE_NAME,
                 'nama_singkat' => 'TL',
-                'nama_aplikasi' => 'Test App',
+                'nama_aplikasi' => self::TEST_APPLICATION_NAME,
                 'jenis_layanan_aplikasi' => 'publik',
                 'kode_unitOrganisasi' => 'TEST001',
                 'tipe_akuisisi' => 'Custom-Made',
@@ -96,8 +119,8 @@ class AplikasiCrudTest extends TestCase
     {
         Storage::fake('public');
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->post('/api/aplikasi', [
+        $response = $this->withToken($this->unitKerjaToken)
+            ->post(self::APLIKASI_ENDPOINT, [
                 'nama_layanan' => 'Layanan Unit',
                 'nama_singkat' => 'LU',
                 'nama_aplikasi' => 'Aplikasi Unit',
@@ -122,10 +145,10 @@ class AplikasiCrudTest extends TestCase
     public function test_pengelola_can_update_aplikasi(): void
     {
         $aplikasi = Aplikasi::factory()->create([
-            'status' => 'pengembangan'
+            'status' => 'pengembangan',
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
+        $response = $this->withToken($this->pengelolaToken)
             ->putJson("/api/aplikasi/{$aplikasi->id}", [
                 'nama_layanan' => 'Test Layanan Updated',
                 'nama_singkat' => 'TLU',
@@ -158,7 +181,7 @@ class AplikasiCrudTest extends TestCase
             'status' => 'pengembangan',
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
+        $response = $this->withToken($this->pengelolaToken)
             ->putJson("/api/aplikasi/{$aplikasi->id}", [
                 'status' => 'diajukan',
             ]);
@@ -178,19 +201,19 @@ class AplikasiCrudTest extends TestCase
     {
         Storage::fake('public');
 
-        Storage::disk('public')->put('legacy/pengajuan.pdf', 'legacy');
-        Storage::disk('public')->put('documents/formulir.pdf', 'document');
-        Storage::disk('public')->put('rfc_documents/formulir-rfc.pdf', 'rfc');
+        Storage::disk('public')->put(self::LEGACY_DOCUMENT_PATH, 'legacy');
+        Storage::disk('public')->put(self::APPLICATION_DOCUMENT_PATH, 'document');
+        Storage::disk('public')->put(self::RFC_DOCUMENT_PATH, 'rfc');
 
         $aplikasi = Aplikasi::factory()->create([
-            'doc_pengajuan_path' => 'legacy/pengajuan.pdf',
+            'doc_pengajuan_path' => self::LEGACY_DOCUMENT_PATH,
         ]);
 
         $document = $aplikasi->documents()->create([
             'document_type' => 'formulir_pengajuan',
-            'storage_path' => 'documents/formulir.pdf',
+            'storage_path' => self::APPLICATION_DOCUMENT_PATH,
             'original_filename' => 'formulir.pdf',
-            'mime_type' => 'application/pdf',
+            'mime_type' => self::PDF_MIME_TYPE,
             'file_size' => 16,
             'version' => 1,
             'status' => 'active',
@@ -213,9 +236,9 @@ class AplikasiCrudTest extends TestCase
         $rfc = $aplikasi->rfcs()->create([
             'tipe_rfc' => 'Minor',
             'deskripsi' => 'Perubahan kecil',
-            'formulir_path' => 'rfc_documents/formulir-rfc.pdf',
+            'formulir_path' => self::RFC_DOCUMENT_PATH,
             'formulir_original_filename' => 'formulir-rfc.pdf',
-            'formulir_mime_type' => 'application/pdf',
+            'formulir_mime_type' => self::PDF_MIME_TYPE,
             'formulir_file_size' => 32,
             'pelaksana' => 'Internal Pusdatik',
             'status_tindaklanjut' => 'Analisa Desain',
@@ -230,11 +253,11 @@ class AplikasiCrudTest extends TestCase
             'is_read' => false,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-                         ->deleteJson("/api/aplikasi/{$aplikasi->id}");
+        $response = $this->withToken($this->pengelolaToken)
+            ->deleteJson("/api/aplikasi/{$aplikasi->id}");
 
         $response->assertStatus(200)
-                 ->assertJson(['success' => true]);
+            ->assertJson(['success' => true]);
 
         $this->assertDatabaseMissing('aplikasis', ['id' => $aplikasi->id]);
         $this->assertDatabaseMissing('aplikasi_documents', ['id' => $document->id]);
@@ -243,16 +266,16 @@ class AplikasiCrudTest extends TestCase
         $this->assertDatabaseMissing('rfcs', ['id' => $rfc->id]);
         $this->assertDatabaseMissing('app_notifications', ['id' => $notification->id]);
 
-        Storage::disk('public')->assertMissing('legacy/pengajuan.pdf');
-        Storage::disk('public')->assertMissing('documents/formulir.pdf');
-        Storage::disk('public')->assertMissing('rfc_documents/formulir-rfc.pdf');
+        Storage::disk('public')->assertMissing(self::LEGACY_DOCUMENT_PATH);
+        Storage::disk('public')->assertMissing(self::APPLICATION_DOCUMENT_PATH);
+        Storage::disk('public')->assertMissing(self::RFC_DOCUMENT_PATH);
     }
 
     public function test_pengelola_can_mark_aplikasi_as_nonaktif_without_deleting_it(): void
     {
         $aplikasi = Aplikasi::factory()->production()->create();
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
+        $response = $this->withToken($this->pengelolaToken)
             ->postJson("/api/aplikasi/{$aplikasi->id}/nonaktifkan");
 
         $response->assertStatus(200)
@@ -271,8 +294,8 @@ class AplikasiCrudTest extends TestCase
             'aksi' => 'Nonaktifkan Aplikasi',
         ]);
 
-        $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-            ->getJson('/api/aplikasi/stats')
+        $this->withToken($this->pengelolaToken)
+            ->getJson(self::APLIKASI_STATS_ENDPOINT)
             ->assertStatus(200)
             ->assertJsonPath('data.inactive', 1);
     }
@@ -283,7 +306,7 @@ class AplikasiCrudTest extends TestCase
             'status' => Aplikasi::STATUS_PENGEMBANGAN,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
+        $response = $this->withToken($this->pengelolaToken)
             ->postJson("/api/aplikasi/{$aplikasi->id}/nonaktifkan");
 
         $response->assertStatus(422)
@@ -310,8 +333,8 @@ class AplikasiCrudTest extends TestCase
 
         Cache::forget('aplikasi:stats:v1');
 
-        $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-            ->getJson('/api/aplikasi/stats')
+        $this->withToken($this->pengelolaToken)
+            ->getJson(self::APLIKASI_STATS_ENDPOINT)
             ->assertStatus(200)
             ->assertJsonPath('data.development', 0)
             ->assertJsonPath('data.operational', 0)
@@ -327,13 +350,13 @@ class AplikasiCrudTest extends TestCase
         Aplikasi::factory()->count(3)->create();
 
         // Pengelola can list
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-                         ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->pengelolaToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
         $response->assertStatus(200);
 
         // User can list (read-only)
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->readerToken)
-                         ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->readerToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
         $response->assertStatus(200);
     }
 
@@ -345,8 +368,8 @@ class AplikasiCrudTest extends TestCase
         $ownApp = Aplikasi::factory()->create(['created_by' => $this->unitKerjaUser->id]);
         Aplikasi::factory()->create();
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
 
         $response->assertStatus(200);
         $response->assertJsonFragment(['id' => $ownApp->id]);
@@ -378,8 +401,8 @@ class AplikasiCrudTest extends TestCase
             'status' => Aplikasi::STATUS_DEPLOYED_PRODUCTION,
         ]);
 
-        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
-            ->getJson('/api/aplikasi/stats')
+        $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_STATS_ENDPOINT)
             ->assertStatus(200)
             ->assertJsonPath('data.development', 1)
             ->assertJsonPath('data.operational', 1)
@@ -389,13 +412,13 @@ class AplikasiCrudTest extends TestCase
 
     public function test_new_unit_kerja_has_empty_list_and_stats(): void
     {
-        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
-            ->getJson('/api/aplikasi')
+        $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_ENDPOINT)
             ->assertStatus(200)
             ->assertJsonCount(0, 'data');
 
-        $this->withHeader('Authorization', 'Bearer '.$this->unitKerjaToken)
-            ->getJson('/api/aplikasi/stats')
+        $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_STATS_ENDPOINT)
             ->assertStatus(200)
             ->assertJsonPath('data.development', 0)
             ->assertJsonPath('data.operational', 0)
@@ -414,15 +437,15 @@ class AplikasiCrudTest extends TestCase
             'status' => Aplikasi::STATUS_PENGEMBANGAN,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
 
         $response->assertStatus(200);
         $ids = collect($response->json('data'))->pluck('id');
         $this->assertNotContains($uatApp->id, $ids);
         $this->assertNotContains($hiddenDevelopmentApp->id, $ids);
 
-        $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+        $this->withToken($this->unitKerjaToken)
             ->getJson("/api/aplikasi/{$uatApp->id}")
             ->assertStatus(404);
     }
@@ -439,15 +462,15 @@ class AplikasiCrudTest extends TestCase
             'document_type' => 'uat',
             'storage_path' => 'aplikasi_documents/uat.pdf',
             'original_filename' => 'uat.pdf',
-            'mime_type' => 'application/pdf',
+            'mime_type' => self::PDF_MIME_TYPE,
             'file_size' => 1000,
             'version' => 1,
             'status' => 'active',
             'uploaded_by' => $this->unitKerjaUser->id,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
 
         $response->assertStatus(200);
 
@@ -464,14 +487,14 @@ class AplikasiCrudTest extends TestCase
             'status' => Aplikasi::STATUS_UAT,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->getJson('/api/aplikasi');
+        $response = $this->withToken($this->unitKerjaToken)
+            ->getJson(self::APLIKASI_ENDPOINT);
 
         $response->assertStatus(200);
         $ids = collect($response->json('data'))->pluck('id');
         $this->assertNotContains($otherUnitApp->id, $ids);
 
-        $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+        $this->withToken($this->unitKerjaToken)
             ->getJson("/api/aplikasi/{$otherUnitApp->id}")
             ->assertStatus(404);
     }
@@ -483,7 +506,7 @@ class AplikasiCrudTest extends TestCase
     {
         $otherApp = Aplikasi::factory()->create(['created_by' => $this->pengelolaUser->id]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
+        $response = $this->withToken($this->unitKerjaToken)
             ->getJson("/api/aplikasi/{$otherApp->id}");
 
         $response->assertStatus(404);
@@ -494,7 +517,7 @@ class AplikasiCrudTest extends TestCase
      */
     public function test_unauthenticated_cannot_access_aplikasi(): void
     {
-        $response = $this->getJson('/api/aplikasi');
+        $response = $this->getJson(self::APLIKASI_ENDPOINT);
         $response->assertStatus(401);
     }
 
@@ -505,8 +528,8 @@ class AplikasiCrudTest extends TestCase
             'created_by' => $this->unitKerjaUser->id,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-            ->getJson('/api/aplikasi/pengelola-notifications');
+        $response = $this->withToken($this->pengelolaToken)
+            ->getJson(self::PENGELOLA_NOTIFICATIONS_ENDPOINT);
 
         $response->assertStatus(200)
             ->assertJsonPath('data.count', 1)
@@ -520,8 +543,8 @@ class AplikasiCrudTest extends TestCase
             'created_by' => $this->pengelolaUser->id,
         ]);
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->pengelolaToken)
-            ->getJson('/api/aplikasi/pengelola-notifications');
+        $response = $this->withToken($this->pengelolaToken)
+            ->getJson(self::PENGELOLA_NOTIFICATIONS_ENDPOINT);
 
         $response->assertStatus(200)
             ->assertJsonPath('data.count', 0);
@@ -529,8 +552,8 @@ class AplikasiCrudTest extends TestCase
 
     public function test_unit_kerja_cannot_access_pengelola_notifications(): void
     {
-        $response = $this->withHeader('Authorization', 'Bearer ' . $this->unitKerjaToken)
-            ->getJson('/api/aplikasi/pengelola-notifications');
+        $response = $this->withToken($this->unitKerjaToken)
+            ->getJson(self::PENGELOLA_NOTIFICATIONS_ENDPOINT);
 
         $response->assertStatus(403);
     }

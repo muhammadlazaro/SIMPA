@@ -22,13 +22,15 @@ use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 
 class AplikasiDocumentController extends Controller
 {
+    private const ACCESS_DENIED_MESSAGE = 'Akses ditolak.';
+
     private const PRIVATE_DISK = 'local';
 
     public function index(Request $request, Aplikasi $aplikasi): JsonResponse
     {
         $user = $request->user();
         if (! AplikasiDocumentAccess::canView($user, $aplikasi)) {
-            return ApiResponse::forbidden('Akses ditolak.');
+            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
 
         $documents = $aplikasi->documents()
@@ -44,7 +46,7 @@ class AplikasiDocumentController extends Controller
     {
         $user = $request->user();
         if (! AplikasiDocumentAccess::canView($user, $aplikasi)) {
-            return ApiResponse::forbidden('Akses ditolak.');
+            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
 
         $aplikasiId = (int) $aplikasi->getKey();
@@ -123,7 +125,7 @@ class AplikasiDocumentController extends Controller
         }
 
         if (! AplikasiDocumentAccess::canView($request->user(), $aplikasi)) {
-            return ApiResponse::forbidden('Akses ditolak.');
+            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
         }
 
         $diskName = $this->resolveDisk($document);
@@ -137,7 +139,7 @@ class AplikasiDocumentController extends Controller
 
         $fileName = trim((string) $document->getAttribute('original_filename')) ?: 'dokumen';
         $fallbackName = preg_replace('/[^A-Za-z0-9._-]/', '_', $fileName) ?: 'dokumen';
-        $disposition = (new ResponseHeaderBag())->makeDisposition(
+        $disposition = (new ResponseHeaderBag)->makeDisposition(
             ResponseHeaderBag::DISPOSITION_INLINE,
             $fileName,
             $fallbackName
