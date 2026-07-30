@@ -585,14 +585,14 @@ function statusToneClass(status) {
 }
 
 .withdraw-btn {
-  background: rgba(220, 38, 38, 0.07) !important;
-  color: #b91c1c !important;
-  border: 1px solid rgba(220, 38, 38, 0.25) !important;
+  background: #fef2f2 !important;
+  color: #7f1d1d !important;
+  border: 1px solid #fecaca !important;
 }
 
 .withdraw-btn:hover {
-  background: rgba(220, 38, 38, 0.14) !important;
-  border-color: rgba(220, 38, 38, 0.4) !important;
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
 }
 
 .btn-danger {
