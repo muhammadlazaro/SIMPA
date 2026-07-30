@@ -114,7 +114,7 @@ async function submit() {
     <div class="login-box">
       <div class="login-header">
         <div class="login-brand-mark">
-          <img src="/bssn.png" alt="BSSN" />
+          <img :src="'/bssn.png'" alt="BSSN" />
         </div>
         <h1>Sistem Manajemen Pengembangan Aplikasi</h1>
         <p>Silakan masuk untuk melanjutkan</p>
