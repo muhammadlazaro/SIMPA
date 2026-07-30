@@ -642,10 +642,10 @@ function handleConfirmModalChange(open) {
   border-radius: 8px;
 }
 
-.stat-icon-wrap.bg-blue { background: #eff6ff; color: #3b82f6; }
-.stat-icon-wrap.bg-green { background: #f0fdf4; color: #10b981; }
-.stat-icon-wrap.bg-amber { background: #fffbeb; color: #f59e0b; }
-.stat-icon-wrap.bg-red { background: #fef2f2; color: #ef4444; }
+.stat-icon-wrap.bg-blue { background: #eff6ff; color: #1d4ed8; }
+.stat-icon-wrap.bg-green { background: #f0fdf4; color: #047857; }
+.stat-icon-wrap.bg-amber { background: #fffbeb; color: #92400e; }
+.stat-icon-wrap.bg-red { background: #fef2f2; color: #b91c1c; }
 
 .stat-label {
   font-size: var(--idds-caption-size);

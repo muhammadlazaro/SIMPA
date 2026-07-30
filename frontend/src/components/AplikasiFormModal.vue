@@ -178,14 +178,13 @@ async function handleSubmit() {
     fd.append('kode_unitOrganisasi', form.value.kode_unitOrganisasi)
     fd.append('tipe_akuisisi', form.value.tipe_akuisisi)
 
-    let appId = form.value.id
     if (form.value.id) {
       fd.append('_method', 'PUT')
       await http.post(`/aplikasi/${form.value.id}`, fd)
       toast.push('Aplikasi berhasil diupdate!', 'success')
     } else {
       const res = await http.post('/aplikasi', fd)
-      appId = res.data?.data?.aplikasi?.id || res.data?.data?.id || res.data?.id
+      const appId = res.data?.data?.aplikasi?.id || res.data?.data?.id || res.data?.id
       // Upload formulir jika ada file dipilih
       if (formulirFile.value && appId) {
         uploadingDoc.value = true
@@ -552,9 +551,9 @@ async function handleSubmit() {
 }
 
 .step-item.completed .step-number {
-  background: #10b981;
+  background: #047857;
   color: white;
-  border-color: #10b981;
+  border-color: #047857;
 }
 
 .step-label { font-size: var(--idds-caption-size); font-weight: var(--idds-weight-semibold); line-height: var(--idds-caption-line); }
@@ -826,7 +825,7 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #059669;
+  color: #047857;
 }
 
 .step3-file-info {
@@ -869,7 +868,7 @@ async function handleSubmit() {
 .step3-remove-btn:hover {
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  color: #b91c1c;
 }
 
 .step3-required-note {

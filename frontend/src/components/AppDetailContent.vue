@@ -2919,9 +2919,13 @@ const userContextMessage = computed(() => {
 }
 
 .unit-doc-empty {
-  font-size: var(--idds-caption-small-size);
-  color: var(--ina-content-secondary);
-  line-height: var(--idds-caption-small-line);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: var(--idds-caption-size);
+  color: var(--ina-content-tertiary);
+  line-height: var(--idds-caption-line);
 }
 
 .unit-doc-empty-hint {
@@ -3364,7 +3368,7 @@ const userContextMessage = computed(() => {
 .sec-optional {
   font-size: var(--idds-caption-small-size);
   font-weight: var(--idds-weight-medium);
-  color: #94a3b8;
+  color: #475569;
   background: #f1f5f9;
   border-radius: 4px;
   padding: 1px 6px;
@@ -3514,12 +3518,12 @@ const userContextMessage = computed(() => {
 .sec-verdict-btn svg { flex-shrink: 0; }
 
 .sec-verdict-btn--pass {
-  background: #16a34a;
+  background: #15803d;
   color: #fff;
   border-color: #15803d;
 }
 .sec-verdict-btn--pass:hover:not(:disabled) {
-  background: #15803d;
+  background: #166534;
   box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
   transform: translateY(-1px);
 }
@@ -3621,7 +3625,7 @@ const userContextMessage = computed(() => {
   background: #f8fafc;
   border-radius: 8px;
   font-size: var(--idds-caption-size);
-  color: #94a3b8;
+  color: #475569;
   line-height: var(--idds-caption-line);
 }
 .sec-history-empty svg { color: #cbd5e1; }
@@ -3678,7 +3682,7 @@ const userContextMessage = computed(() => {
 
 .unit-doc-stage-lock-icon {
   background: #f3f4f6;
-  color: #9ca3af;
+  color: #4b5563;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -3766,17 +3770,6 @@ const userContextMessage = computed(() => {
 .uk-context-desc {
   margin: 0;
   font-size: var(--idds-caption-size);
-  line-height: var(--idds-caption-line);
-}
-
-/* Empty doc state */
-.unit-doc-empty {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: var(--idds-caption-size);
-  color: var(--ina-content-tertiary);
   line-height: var(--idds-caption-line);
 }
 
@@ -4606,8 +4599,8 @@ const userContextMessage = computed(() => {
   font-size: var(--idds-caption-size);
   font-weight: var(--idds-weight-medium);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #475569;
+  background: #334155;
   color: #fff;
   cursor: pointer;
   transition: all 0.15s;
@@ -4616,8 +4609,8 @@ const userContextMessage = computed(() => {
 }
 
 .detail-hero-refresh:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: #1e293b;
+  border-color: #64748b;
 }
 
 .detail-hero-refresh:disabled {
@@ -4658,20 +4651,20 @@ const userContextMessage = computed(() => {
   font-size: var(--idds-caption-size);
   font-weight: var(--idds-weight-bold);
   background: #e2e8f0;
-  color: #64748b;
+  color: #334155;
   border: 2px solid #cbd5e1;
   flex-shrink: 0;
   transition: all 0.2s ease;
   line-height: var(--idds-caption-line);
 }
 .deploy-step--done .deploy-step-circle {
-  background: #16a34a;
+  background: #15803d;
   color: #fff;
   border-color: #15803d;
 }
 .deploy-step--locked .deploy-step-circle {
   background: #f1f5f9;
-  color: #94a3b8;
+  color: #475569;
   border-color: #e2e8f0;
 }
 .deploy-step-line {
@@ -4734,7 +4727,7 @@ const userContextMessage = computed(() => {
 }
 .deploy-badge--locked {
   background: #f1f5f9;
-  color: #94a3b8;
+  color: #475569;
 }
 .deploy-done-info {
   display: flex;
@@ -4764,12 +4757,12 @@ const userContextMessage = computed(() => {
   line-height: var(--idds-caption-line);
 }
 .deploy-confirm-btn--production {
-  background: #16a34a;
+  background: #15803d;
   color: #fff;
   border: 2px solid #15803d;
 }
 .deploy-confirm-btn--production:hover:not(:disabled) {
-  background: #15803d;
+  background: #166534;
   box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
 }
 .deploy-production-warning {
