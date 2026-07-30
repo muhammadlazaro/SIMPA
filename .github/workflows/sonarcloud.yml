@@ -76,6 +76,7 @@ jobs:
 
           auth_header="Authorization: Bearer ${SONAR_TOKEN}"
           issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&ps=1&facets=impactSeverities"
+          medium_issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&impactSeverities=MEDIUM&ps=40&p=1"
           gate_url="https://sonarcloud.io/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=master"
           analyses_url="https://sonarcloud.io/api/project_analyses/search?project=${SONAR_PROJECT_KEY}&branch=master&ps=1"
           coverage_url="https://sonarcloud.io/api/measures/component_tree?component=${SONAR_PROJECT_KEY}&branch=master&metricKeys=new_coverage,new_lines_to_cover,new_uncovered_lines&qualifiers=FIL&ps=500"
@@ -84,6 +85,10 @@ jobs:
             --header "${auth_header}" \
             "${issues_url}" \
             --output sonar-issues-summary.json
+          curl --fail --silent --show-error \
+            --header "${auth_header}" \
+            "${medium_issues_url}" \
+            --output sonar-medium-issues.json
           curl --fail --silent --show-error \
             --header "${auth_header}" \
             "${gate_url}" \
@@ -111,6 +116,12 @@ jobs:
               | .values[]
               | "- \(.val): **\(.count)**"
             ' sonar-issues-summary.json
+            echo
+            echo "### First 40 open Medium issues"
+            jq -r '
+              .issues[]
+              | "- `\(.component | sub(\"^[^:]+:\"; \"\")):\(.line // 1)` [\(.rule)] \(.message)"
+            ' sonar-medium-issues.json
             echo
             echo "### Failed Quality Gate conditions"
             jq -r '
