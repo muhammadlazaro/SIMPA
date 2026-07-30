@@ -501,10 +501,10 @@ function handleFormModalChange(open) {
               </div>
               <SingleFileUpload
                 title="Pilih formulir RFC"
-                description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB"
+                description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 8 MB"
                 accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 :allowed-extensions="['pdf', 'doc', 'docx', 'xls', 'xlsx']"
-                :max-size="10 * 1024 * 1024"
+                :max-size="8 * 1000 * 1000"
                 :validate-magic-number="true"
                 :disabled="savingRfc"
                 @change="onRfcFileChange"

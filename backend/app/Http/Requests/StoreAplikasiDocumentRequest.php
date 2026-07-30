@@ -20,7 +20,7 @@ class StoreAplikasiDocumentRequest extends FormRequest
     {
         return [
             'document_type' => ['required', Rule::enum(AplikasiJenisDokumen::class)],
-            'file' => ['required', 'file', 'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'max:10240'],
+            'file' => ['required', 'file', 'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'max:8000'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ];
     }

@@ -2159,10 +2159,10 @@ const userContextMessage = computed(() => {
               <div v-if="docSectionCanUploadNow(section)" class="unit-doc-upload">
                 <SingleFileUpload
                   :title="`Pilih ${section.title.toLowerCase()}`"
-                  description="PDF, DOC, atau DOCX; maksimal 10 MB."
+                  description="PDF, DOC, atau DOCX; maksimal 8 MB."
                   accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   :allowed-extensions="['pdf', 'doc', 'docx']"
-                  :max-size="10 * 1024 * 1024"
+                  :max-size="8 * 1000 * 1000"
                   :validate-magic-number="true"
                   :disabled="uploadingType === section.type"
                   :status="selectedFiles[section.type] ? 'success' : 'idle'"

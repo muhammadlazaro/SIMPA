@@ -29,13 +29,13 @@ class LogRequests
     {
         // Log request details
         $startTime = microtime(true);
-        
+
         // Process the request
         $response = $next($request);
-        
+
         // Calculate response time
         $duration = round((microtime(true) - $startTime) * 1000, 2); // in milliseconds
-        
+
         $statusCode = $response->getStatusCode();
         $isError = $statusCode >= 400;
 
@@ -58,7 +58,7 @@ class LogRequests
             'status_code' => $statusCode,
             'duration_ms' => $duration,
         ];
-        
+
         // Log based on status code
         if ($statusCode >= 500) {
             Log::error('API Request - Server Error', $logData);
@@ -67,7 +67,7 @@ class LogRequests
         } else {
             Log::info('API Request', $logData);
         }
-        
+
         return $response;
     }
 
@@ -83,11 +83,11 @@ class LogRequests
             return false;
         }
 
-        return mt_rand(1, 10_000) <= (int) round($sampleRate * 10_000);
+        return random_int(1, 10_000) <= (int) round($sampleRate * 10_000);
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function redact(array $data): array
@@ -96,6 +96,7 @@ class LogRequests
             $normalizedKey = strtolower((string) $key);
             if (in_array($normalizedKey, self::REDACTED_KEYS, true)) {
                 $data[$key] = '[REDACTED]';
+
                 continue;
             }
 

@@ -18,18 +18,17 @@ class StoreRfcRequest extends FormRequest
         $requiresFollowUpFields = $this->user()?->isPengelolaAplikasi() === true;
 
         return [
-            'aplikasi_id' => ['required','exists:aplikasis,id'],
+            'aplikasi_id' => ['required', 'exists:aplikasis,id'],
             'tipe_rfc' => ['required', Rule::in(Rfc::TIPE_VALUES)],
-            'deskripsi' => ['nullable','string','max:5000'],
+            'deskripsi' => ['nullable', 'string', 'max:5000'],
             'formulir_rfc' => [
                 'required',
                 'file',
                 'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'max:10240',
+                'max:8000',
             ],
             'pelaksana' => [$requiresFollowUpFields ? 'required' : 'nullable', Rule::in(Rfc::PELAKSANA_VALUES)],
             'status_tindaklanjut' => [$requiresFollowUpFields ? 'required' : 'nullable', Rule::in(Rfc::STATUS_VALUES)],
         ];
     }
 }
-

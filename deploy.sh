@@ -117,7 +117,7 @@ fi
 
 if ! command -v node >/dev/null 2>&1; then
     echo "Installing Node.js..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    curl --proto '=https' --tlsv1.2 -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
 fi
 
@@ -293,9 +293,9 @@ VITE_API_TIMEOUT=30000
 EOF
 
 if [ -f package-lock.json ]; then
-    npm ci
+    npm ci --ignore-scripts
 else
-    npm install
+    npm install --ignore-scripts
 fi
 npm run build
 

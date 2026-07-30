@@ -270,7 +270,7 @@ describe('UI foundation', () => {
       components: { SingleFileUpload },
       template: `
         <div style="width: 240px">
-          <SingleFileUpload title="Pilih dokumen" description="PDF maksimal 10 MB" />
+          <SingleFileUpload title="Pilih dokumen" description="PDF maksimal 8 MB" />
         </div>
       `,
     }, { attachTo: host })
@@ -312,9 +312,11 @@ describe('UI foundation', () => {
     const toast = useToastStore()
 
     toast.push('Data sedang diproses', 'info', 0)
+    const firstId = toast.items[0].id
     toast.push('Data berhasil disimpan', 'success', 0)
 
     expect(toast.items).toHaveLength(1)
+    expect(toast.items[0].id).not.toBe(firstId)
     expect(toast.items[0]).toMatchObject({
       message: 'Data berhasil disimpan',
       type: 'success',

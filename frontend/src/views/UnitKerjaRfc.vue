@@ -398,17 +398,17 @@ function handleFormModalChange(open) {
           <section class="idds-upload-section" aria-labelledby="unit-rfc-upload-title">
             <div>
               <h4 id="unit-rfc-upload-title">Formulir RFC</h4>
-              <p>Unggah satu dokumen resmi berformat PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB.</p>
+              <p>Unggah satu dokumen resmi berformat PDF, DOC, DOCX, XLS, atau XLSX maksimal 8 MB.</p>
             </div>
             <a href="/templates/Formulir-RFC.xlsx" class="rfc-template-link" target="_blank" rel="noopener">
               Buka template formulir RFC
             </a>
             <SingleFileUpload
               title="Pilih formulir RFC"
-              description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 10 MB"
+              description="PDF, DOC, DOCX, XLS, atau XLSX maksimal 8 MB"
               accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               :allowed-extensions="['pdf', 'doc', 'docx', 'xls', 'xlsx']"
-              :max-size="10 * 1024 * 1024"
+              :max-size="8 * 1000 * 1000"
               :validate-magic-number="true"
               :disabled="saving"
               @change="onRfcFileChange"
