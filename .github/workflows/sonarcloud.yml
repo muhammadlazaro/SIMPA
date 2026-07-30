@@ -120,7 +120,7 @@ jobs:
             echo "### First 40 open Medium issues"
             jq -r '
               .issues[]
-              | "- `\(.component | sub(\"^[^:]+:\"; \"\")):\(.line // 1)` [\(.rule)] \(.message)"
+              | "- `\(.component | sub("^[^:]+:"; "")):\(.line // 1)` [\(.rule)] \(.message)"
             ' sonar-medium-issues.json
             echo
             echo "### Failed Quality Gate conditions"
