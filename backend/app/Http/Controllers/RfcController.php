@@ -186,7 +186,7 @@ class RfcController extends Controller
                 $newPath = $file->store('rfc_documents', 'public');
             }
 
-            $rfc = DB::transaction(function () use ($request, $id, $payload, $file, &$oldPath, $newPath) {
+            $rfc = DB::transaction(function () use ($id, $payload, $file, &$oldPath, $newPath) {
                 $rfc = Rfc::findOrFail($id);
 
                 if ($file && $newPath) {

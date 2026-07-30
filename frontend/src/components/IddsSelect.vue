@@ -10,7 +10,7 @@ const props = defineProps({
   panelWidth: { type: [String, Number], default: undefined },
 })
 
-const model = defineModel({ default: '' })
+const model = defineModel({ type: [String, Number], default: '' })
 const attrs = useAttrs()
 const root = ref(null)
 let observer = null

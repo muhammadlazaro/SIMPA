@@ -548,6 +548,7 @@ function handleConfirmModalChange(open) {
               :helper-text="editingPersonil ? 'Kosongkan jika password tidak diubah.' : 'Minimal 8 karakter dengan huruf besar, angka, dan simbol.'"
               :status="fieldError('password') ? 'error' : 'neutral'"
               :status-message="fieldError('password')"
+              autocomplete="new-password"
             />
             <PasswordInput
               v-model="form.password_confirmation"
@@ -555,6 +556,7 @@ function handleConfirmModalChange(open) {
               placeholder="Ulangi password"
               :max-length="128"
               :required="!editingPersonil || !!form.password"
+              autocomplete="new-password"
             />
           </div>
           <div class="modal-actions">

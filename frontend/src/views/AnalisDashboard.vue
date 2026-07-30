@@ -112,6 +112,7 @@ async function openAnalisaEdit(app) {
     hideTransaksi.value = false
     showAnalisaModal.value = true
   } catch (e) {
+    warnDev('[AnalisDashboard] openAnalisaEdit error:', e)
     toast.push('Gagal memuat data aplikasi', 'error')
   }
 }

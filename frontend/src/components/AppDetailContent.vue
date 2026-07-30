@@ -4404,7 +4404,7 @@ const userContextMessage = computed(() => {
   color: var(--ina-content-primary);
   font-size: var(--idds-caption-size);
   font-weight: var(--idds-weight-bold);
-  word-break: break-word;
+  overflow-wrap: anywhere;
   line-height: var(--idds-caption-line);
 }
 
@@ -4436,7 +4436,7 @@ const userContextMessage = computed(() => {
   font-size: var(--idds-caption-size);
   font-weight: var(--idds-weight-semibold);
   text-align: right;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   line-height: var(--idds-caption-line);
 }
 

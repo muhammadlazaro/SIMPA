@@ -74,7 +74,6 @@ class AutoGenerationService
     private function generateAnalisaDesain(Aplikasi $aplikasi, bool $resetAnalisaDesain = false): array
     {
         $configs = [];
-        $namaAplikasi = $aplikasi->nama_aplikasi;
 
         // Jika reset, hapus semua data analisa desain yang ada
         if ($resetAnalisaDesain) {
