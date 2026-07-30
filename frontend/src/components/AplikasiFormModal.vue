@@ -868,7 +868,7 @@ async function handleSubmit() {
 .step3-remove-btn:hover {
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.3);
-  color: #b91c1c;
+  color: #7f1d1d;
 }
 
 .step3-required-note {

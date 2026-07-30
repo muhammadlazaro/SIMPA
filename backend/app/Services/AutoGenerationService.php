@@ -73,192 +73,23 @@ class AutoGenerationService
      */
     private function generateAnalisaDesain(Aplikasi $aplikasi, bool $resetAnalisaDesain = false): array
     {
-        $configs = [];
-
-        // Jika reset, hapus semua data analisa desain yang ada
         if ($resetAnalisaDesain) {
             AnalisaDesain::where('aplikasi_id', $aplikasi->id)->delete();
         }
 
-        // UI Platform - berdasarkan jenis_layanan_aplikasi
-        if ($aplikasi->jenis_layanan_aplikasi === 'publik') {
-            // Untuk publik: layanan dan dws
-            $configs[] = AnalisaDesain::updateOrCreate(
-                [
-                    'aplikasi_id' => $aplikasi->id,
-                    'ui_platform' => 'layanan'
-                ],
-                [
-                    'interop_type' => null,
-                    'storage_type' => null,
-                    'nama_aktor' => null,
-                    'method' => null,
-                    'url' => null,
-                    'tipe_resource' => null,
-                    'aktor_transaksi' => null
-                ]
-            );
-
-            $configs[] = AnalisaDesain::updateOrCreate(
-                [
-                    'aplikasi_id' => $aplikasi->id,
-                    'ui_platform' => 'dws'
-                ],
-                [
-                    'interop_type' => null,
-                    'storage_type' => null,
-                    'nama_aktor' => null,
-                    'method' => null,
-                    'url' => null,
-                    'tipe_resource' => null,
-                    'aktor_transaksi' => null
-                ]
-            );
-        } else {
-            // Untuk internal: hanya dws
-            // Hapus platform 'layanan' jika ada
-            AnalisaDesain::where('aplikasi_id', $aplikasi->id)
-                ->where('ui_platform', 'layanan')
-                ->delete();
-
-            $configs[] = AnalisaDesain::updateOrCreate(
-                [
-                    'aplikasi_id' => $aplikasi->id,
-                    'ui_platform' => 'dws'
-                ],
-                [
-                    'interop_type' => null,
-                    'storage_type' => null,
-                    'nama_aktor' => null,
-                    'method' => null,
-                    'url' => null,
-                    'tipe_resource' => null,
-                    'aktor_transaksi' => null
-                ]
-            );
-        }
-
-        // Interop
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'interop_type' => 'master-data'
-            ],
-            [
-                'ui_platform' => null,
-                'storage_type' => null,
-                'nama_aktor' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
+        $configs = $this->generateUiPlatformAnalisa($aplikasi);
+        $configs = array_merge(
+            $configs,
+            $this->generateAnalisaDimension($aplikasi, 'interop_type', ['master-data', 'authentication-int']),
+            $this->generateAnalisaDimension($aplikasi, 'storage_type', ['db', 'object-storage']),
+            $this->generateAnalisaDimension($aplikasi, 'nama_aktor', ['User', 'Pegawai', 'Pengelola']),
         );
 
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'interop_type' => 'authentication-int'
-            ],
-            [
-                'ui_platform' => null,
-                'storage_type' => null,
-                'nama_aktor' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        // Storage
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'storage_type' => 'db'
-            ],
-            [
-                'ui_platform' => null,
-                'interop_type' => null,
-                'nama_aktor' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'storage_type' => 'object-storage'
-            ],
-            [
-                'ui_platform' => null,
-                'interop_type' => null,
-                'nama_aktor' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        // Aktor
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'nama_aktor' => 'User'
-            ],
-            [
-                'ui_platform' => null,
-                'interop_type' => null,
-                'storage_type' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'nama_aktor' => 'Pegawai'
-            ],
-            [
-                'ui_platform' => null,
-                'interop_type' => null,
-                'storage_type' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        $configs[] = AnalisaDesain::updateOrCreate(
-            [
-                'aplikasi_id' => $aplikasi->id,
-                'nama_aktor' => 'Pengelola'
-            ],
-            [
-                'ui_platform' => null,
-                'interop_type' => null,
-                'storage_type' => null,
-                'method' => null,
-                'url' => null,
-                'tipe_resource' => null,
-                'aktor_transaksi' => null
-            ]
-        );
-
-        // Transaksi
         $configs[] = AnalisaDesain::updateOrCreate(
             [
                 'aplikasi_id' => $aplikasi->id,
                 'method' => 'GET',
-                'url' => '/api/documents'
+                'url' => '/api/documents',
             ],
             [
                 'ui_platform' => null,
@@ -266,11 +97,48 @@ class AutoGenerationService
                 'storage_type' => null,
                 'nama_aktor' => null,
                 'tipe_resource' => 'terbuka',
-                'aktor_transaksi' => 'user, pengelola'
-            ]
+                'aktor_transaksi' => 'user, pengelola',
+            ],
         );
 
         return $configs;
+    }
+
+    private function generateUiPlatformAnalisa(Aplikasi $aplikasi): array
+    {
+        $platforms = ['dws'];
+        if ($aplikasi->jenis_layanan_aplikasi === 'publik') {
+            array_unshift($platforms, 'layanan');
+        } else {
+            AnalisaDesain::where('aplikasi_id', $aplikasi->id)
+                ->where('ui_platform', 'layanan')
+                ->delete();
+        }
+
+        return $this->generateAnalisaDimension($aplikasi, 'ui_platform', $platforms);
+    }
+
+    private function generateAnalisaDimension(Aplikasi $aplikasi, string $dimension, array $values): array
+    {
+        $nullableAttributes = [
+            'ui_platform',
+            'interop_type',
+            'storage_type',
+            'nama_aktor',
+            'method',
+            'url',
+            'tipe_resource',
+            'aktor_transaksi',
+        ];
+        $attributes = array_fill_keys(array_diff($nullableAttributes, [$dimension]), null);
+
+        return array_map(
+            fn (string $value): AnalisaDesain => AnalisaDesain::updateOrCreate(
+                ['aplikasi_id' => $aplikasi->id, $dimension => $value],
+                $attributes,
+            ),
+            $values,
+        );
     }
 
     /**

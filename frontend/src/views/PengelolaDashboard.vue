@@ -542,7 +542,7 @@ async function onAppSaved() {
   align-items: flex-start;
   gap: 12px;
   padding: 14px 16px;
-  margin-bottom: 16px;
+  margin: 0 20px 16px;
   border-radius: 8px;
   border: 1px solid rgba(235, 87, 87, 0.35);
   background: rgba(235, 87, 87, 0.08);
@@ -650,11 +650,6 @@ async function onAppSaved() {
   font-size: var(--idds-caption-small-size);
   color: var(--ina-content-secondary);
   line-height: var(--idds-caption-small-line);
-}
-
-/* Alert alignment */
-.pengajuan-alert {
-  margin: 0 20px 16px;
 }
 
 @media (max-width: 768px) {

@@ -499,10 +499,10 @@ function statusToneClass(status) {
   flex-shrink: 0;
 }
 
-.bg-blue { background: #eff6ff; color: #3b82f6; }
-.bg-green { background: #ecfdf5; color: #10b981; }
-.bg-amber { background: #fffbeb; color: #f59e0b; }
-.bg-red { background: #fef2f2; color: #ef4444; }
+.bg-blue { background: #eff6ff; color: #1d4ed8; }
+.bg-green { background: #ecfdf5; color: #047857; }
+.bg-amber { background: #fffbeb; color: #92400e; }
+.bg-red { background: #fef2f2; color: #b91c1c; }
 
 .stat-value {
   font-size: var(--idds-heading-h3-size);
@@ -586,7 +586,7 @@ function statusToneClass(status) {
 
 .withdraw-btn {
   background: rgba(220, 38, 38, 0.07) !important;
-  color: #dc2626 !important;
+  color: #b91c1c !important;
   border: 1px solid rgba(220, 38, 38, 0.25) !important;
 }
 

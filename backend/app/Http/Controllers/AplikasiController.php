@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InvalidAplikasiTransitionException;
 use App\Enums\AplikasiStatus;
 use App\Enums\AplikasiJenisDokumen;
 use App\Http\Requests\StoreAplikasiRequest;
@@ -36,7 +37,7 @@ class AplikasiController extends Controller
                 $statuses = array_filter(array_map('trim', explode(',', (string) $value)));
 
                 if ($statuses === [] || count(array_diff($statuses, $allowedStatuses)) > 0) {
-                    $fail('Status aplikasi tidak valid.');
+                    $fail(ucfirst($attribute).' aplikasi tidak valid.');
                 }
             }],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -139,7 +140,7 @@ class AplikasiController extends Controller
      * Ringkasan pengajuan baru dari unit kerja (untuk notifikasi pengelola).
      * Hanya aplikasi berstatus Pengajuan yang dibuat oleh pengguna berperan unit_kerja.
      */
-    public function pengelolaNotifications(Request $request): JsonResponse
+    public function pengelolaNotifications(): JsonResponse
     {
         $query = Aplikasi::query()
             ->where('status', Aplikasi::STATUS_DIAJUKAN)
@@ -438,7 +439,7 @@ class AplikasiController extends Controller
                 }
 
                 if ($statusSebelumnya !== Aplikasi::STATUS_DEPLOYED_PRODUCTION) {
-                    throw new \RuntimeException('Aplikasi hanya dapat dinonaktifkan setelah berstatus deployed production.');
+                    throw new InvalidAplikasiTransitionException('Aplikasi hanya dapat dinonaktifkan setelah berstatus deployed production.');
                 }
 
                 $catatan = trim((string) $request->input('catatan', 'Aplikasi ditandai nonaktif oleh pengelola aplikasi.'));
@@ -468,7 +469,7 @@ class AplikasiController extends Controller
             $this->forgetStatsCache();
 
             return ApiResponse::success(['aplikasi' => $item->fresh()], 'Aplikasi berhasil dinonaktifkan');
-        } catch (\RuntimeException $e) {
+        } catch (InvalidAplikasiTransitionException $e) {
             return ApiResponse::error($e->getMessage(), null, 422);
         } catch (\Exception $e) {
             Log::error('Failed to deactivate aplikasi', [

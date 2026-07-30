@@ -143,12 +143,14 @@ class PersonilController extends Controller
 
         $currentUser = $request->user();
         $newRole = (string) $validated['role'];
+        $authorizationError = null;
         if ($currentUser && (int) $currentUser->getKey() === (int) $personil->getKey() && $newRole !== UserRole::ADMIN_SISTEM->value) {
-            return ApiResponse::forbidden('Akun sendiri tidak boleh dipindahkan dari role Admin Sistem');
+            $authorizationError = ApiResponse::forbidden('Akun sendiri tidak boleh dipindahkan dari role Admin Sistem');
+        } elseif ($this->wouldRemoveLastActiveAdminSistem($personil, $newRole)) {
+            $authorizationError = ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
-
-        if ($this->wouldRemoveLastActiveAdminSistem($personil, $newRole)) {
-            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
+        if ($authorizationError !== null) {
+            return $authorizationError;
         }
 
         $personil->name = $validated['name'];
@@ -175,17 +177,17 @@ class PersonilController extends Controller
     public function destroy(Request $request, string $id): JsonResponse
     {
         $personil = User::find($id);
-        if (! $personil) {
-            return ApiResponse::notFound('Personil tidak ditemukan atau sudah nonaktif');
-        }
-
         $currentUser = $request->user();
-        if ($currentUser && (int) $currentUser->getKey() === (int) $personil->getKey()) {
-            return ApiResponse::forbidden('Akun sendiri tidak boleh dinonaktifkan');
+        $authorizationError = null;
+        if (! $personil) {
+            $authorizationError = ApiResponse::notFound('Personil tidak ditemukan atau sudah nonaktif');
+        } elseif ($currentUser && (int) $currentUser->getKey() === (int) $personil->getKey()) {
+            $authorizationError = ApiResponse::forbidden('Akun sendiri tidak boleh dinonaktifkan');
+        } elseif ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
+            $authorizationError = ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
-
-        if ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
-            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
+        if ($authorizationError !== null) {
+            return $authorizationError;
         }
 
         $personil->tokens()->delete();
@@ -203,17 +205,17 @@ class PersonilController extends Controller
     public function forceDestroy(Request $request, string $id): JsonResponse
     {
         $personil = User::withTrashed()->find($id);
-        if (! $personil) {
-            return ApiResponse::notFound('Personil tidak ditemukan');
-        }
-
         $currentUser = $request->user();
-        if ($currentUser && (int) $currentUser->getKey() === (int) $personil->getKey()) {
-            return ApiResponse::forbidden('Akun sendiri tidak boleh dihapus permanen');
+        $authorizationError = null;
+        if (! $personil) {
+            $authorizationError = ApiResponse::notFound('Personil tidak ditemukan');
+        } elseif ($currentUser && (int) $currentUser->getKey() === (int) $personil->getKey()) {
+            $authorizationError = ApiResponse::forbidden('Akun sendiri tidak boleh dihapus permanen');
+        } elseif ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
+            $authorizationError = ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
         }
-
-        if ($this->wouldRemoveLastActiveAdminSistem($personil, null)) {
-            return ApiResponse::forbidden(self::LAST_ACTIVE_ADMIN_MESSAGE);
+        if ($authorizationError !== null) {
+            return $authorizationError;
         }
 
         $personilId = $personil->getKey();

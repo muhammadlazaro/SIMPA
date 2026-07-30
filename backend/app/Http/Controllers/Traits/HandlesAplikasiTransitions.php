@@ -294,6 +294,11 @@ trait HandlesAplikasiTransitions
 
     public function deployAplikasi(Request $request, Aplikasi $aplikasi): JsonResponse
     {
+        \Illuminate\Support\Facades\Log::notice('Legacy deployment endpoint called', [
+            'aplikasi_id' => $aplikasi->getKey(),
+            'user_id' => $request->user()?->getKey(),
+        ]);
+
         return ApiResponse::error(
             'Endpoint deploy lama dinonaktifkan. Gunakan deployment-status dengan environment staging atau production.',
             null,

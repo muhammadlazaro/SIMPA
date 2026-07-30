@@ -158,12 +158,14 @@ class AplikasiWorkflowController extends Controller
 
     public function updateNote(UpdateAplikasiNoteRequest $request, Aplikasi $aplikasi, AplikasiNote $note): JsonResponse
     {
+        $accessError = null;
         if (! $this->canAccessWorkflowAplikasi($aplikasi, $request->user())) {
-            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+            $accessError = ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        } elseif ((int) $note->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            $accessError = ApiResponse::notFound('Catatan tidak ditemukan');
         }
-
-        if ((int) $note->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Catatan tidak ditemukan');
+        if ($accessError !== null) {
+            return $accessError;
         }
 
         $payload = $request->validated();
@@ -199,16 +201,16 @@ class AplikasiWorkflowController extends Controller
 
     public function destroyNote(Request $request, Aplikasi $aplikasi, AplikasiNote $note): JsonResponse
     {
+        $accessError = null;
         if (! $this->canAccessWorkflowAplikasi($aplikasi, $request->user())) {
-            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+            $accessError = ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        } elseif ((int) $note->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            $accessError = ApiResponse::notFound('Catatan tidak ditemukan');
+        } elseif ((int) $note->getAttribute('created_by') !== (int) $request->user()?->getKey()) {
+            $accessError = ApiResponse::forbidden('Anda hanya dapat menghapus catatan yang Anda buat sendiri.');
         }
-
-        if ((int) $note->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound('Catatan tidak ditemukan');
-        }
-
-        if ((int) $note->getAttribute('created_by') !== (int) $request->user()?->getKey()) {
-            return ApiResponse::forbidden('Anda hanya dapat menghapus catatan yang Anda buat sendiri.');
+        if ($accessError !== null) {
+            return $accessError;
         }
 
         $note->delete();
@@ -280,17 +282,18 @@ class AplikasiWorkflowController extends Controller
 
     public function implementationUpdate(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
-        if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
-        }
-
         $user = $request->user();
         $category = $this->implementationCategoryForUser($user);
-        if ($category === null || (string) $checklist->getAttribute('category') !== $category) {
-            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        $accessError = null;
+        if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            $accessError = ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
+        } elseif ($category === null || (string) $checklist->getAttribute('category') !== $category) {
+            $accessError = ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        } elseif (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
+            $accessError = ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
         }
-        if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
-            return ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
+        if ($accessError !== null) {
+            return $accessError;
         }
 
         $payload = $request->validate([
@@ -308,17 +311,18 @@ class AplikasiWorkflowController extends Controller
 
     public function implementationDestroy(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
-        if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
-            return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
-        }
-
         $user = $request->user();
         $category = $this->implementationCategoryForUser($user);
-        if ($category === null || (string) $checklist->getAttribute('category') !== $category) {
-            return ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        $accessError = null;
+        if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
+            $accessError = ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
+        } elseif ($category === null || (string) $checklist->getAttribute('category') !== $category) {
+            $accessError = ApiResponse::forbidden(self::ACCESS_DENIED_MESSAGE);
+        } elseif (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
+            $accessError = ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
         }
-        if (! $this->implementationChecklistAllowedForStatus($category, (string) $aplikasi->getAttribute('status'))) {
-            return ApiResponse::error(self::CHECKLIST_STAGE_MESSAGE, null, 422);
+        if ($accessError !== null) {
+            return $accessError;
         }
 
         $checklist->delete();

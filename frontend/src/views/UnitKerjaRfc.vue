@@ -554,9 +554,9 @@ function handleFormModalChange(open) {
   flex-shrink: 0;
 }
 
-.bg-blue { background: #eff6ff; color: #3b82f6; }
-.bg-green { background: #ecfdf5; color: #10b981; }
-.bg-amber { background: #fffbeb; color: #f59e0b; }
+.bg-blue { background: #eff6ff; color: #1d4ed8; }
+.bg-green { background: #ecfdf5; color: #047857; }
+.bg-amber { background: #fffbeb; color: #92400e; }
 .bg-indigo { background: #eef2ff; color: #4f46e5; }
 
 .stat-value {
@@ -698,8 +698,8 @@ function handleFormModalChange(open) {
 }
 
 .rfc-step.done span {
-  background: #10b981;
-  border-color: #10b981;
+  background: #047857;
+  border-color: #047857;
   color: #fff;
 }
 
@@ -877,7 +877,7 @@ function handleFormModalChange(open) {
   border: 1px solid #fecaca;
   border-radius: 10px;
   background: #fef2f2;
-  color: #dc2626;
+  color: #b91c1c;
   cursor: pointer;
 }
 

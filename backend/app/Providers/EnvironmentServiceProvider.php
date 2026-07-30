@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Exceptions\InvalidEnvironmentConfigurationException;
 use Illuminate\Support\ServiceProvider;
 
 class EnvironmentServiceProvider extends ServiceProvider
@@ -55,7 +56,7 @@ class EnvironmentServiceProvider extends ServiceProvider
         }
 
         if (! empty($missing)) {
-            throw new \RuntimeException(
+            throw new InvalidEnvironmentConfigurationException(
                 'Missing required environment variables: ' . implode(', ', $missing) .
                 '. Please check your .env file.'
             );
@@ -63,14 +64,14 @@ class EnvironmentServiceProvider extends ServiceProvider
 
         $appKey = (string) config('app.key');
         if ($appKey !== '' && strlen($appKey) < 32) {
-            throw new \RuntimeException(
+            throw new InvalidEnvironmentConfigurationException(
                 'APP_KEY must be at least 32 characters. Run: php artisan key:generate'
             );
         }
 
         $validEnvironments = ['local', 'development', 'staging', 'production', 'testing'];
         if (! in_array(config('app.env'), $validEnvironments, true)) {
-            throw new \RuntimeException(
+            throw new InvalidEnvironmentConfigurationException(
                 'APP_ENV must be one of: ' . implode(', ', $validEnvironments)
             );
         }
