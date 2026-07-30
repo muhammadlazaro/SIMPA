@@ -77,6 +77,7 @@ jobs:
           auth_header="Authorization: Bearer ${SONAR_TOKEN}"
           issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&ps=1&facets=impactSeverities"
           medium_issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&impactSeverities=MEDIUM&ps=100&p=1"
+          low_issues_url="https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=master&resolved=false&impactSeverities=LOW&ps=100&p=1"
           gate_url="https://sonarcloud.io/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=master"
           analyses_url="https://sonarcloud.io/api/project_analyses/search?project=${SONAR_PROJECT_KEY}&branch=master&ps=1"
           coverage_url="https://sonarcloud.io/api/measures/component_tree?component=${SONAR_PROJECT_KEY}&branch=master&metricKeys=new_coverage,new_lines_to_cover,new_uncovered_lines&qualifiers=FIL&ps=500"
@@ -89,6 +90,10 @@ jobs:
             --header "${auth_header}" \
             "${medium_issues_url}" \
             --output sonar-medium-issues.json
+          curl --fail --silent --show-error \
+            --header "${auth_header}" \
+            "${low_issues_url}" \
+            --output sonar-low-issues.json
           curl --fail --silent --show-error \
             --header "${auth_header}" \
             "${gate_url}" \
@@ -122,6 +127,12 @@ jobs:
               .issues[]
               | "- `\(.component | sub("^[^:]+:"; "")):\(.line // 1)` [\(.rule)] \(.message)"
             ' sonar-medium-issues.json
+            echo
+            echo "### First 100 open Low issues"
+            jq -r '
+              .issues[]
+              | "- `\(.component | sub("^[^:]+:"; "")):\(.line // 1)` [\(.rule)] \(.message)"
+            ' sonar-low-issues.json
             echo
             echo "### Failed Quality Gate conditions"
             jq -r '
@@ -178,5 +189,14 @@ jobs:
         with:
           name: sonar-medium-issues
           path: sonar-medium-issues.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload SonarCloud low issue report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sonar-low-issues
+          path: sonar-low-issues.json
           if-no-files-found: error
           retention-days: 1
