@@ -110,7 +110,7 @@ class AplikasiWorkflowController extends Controller
         return ApiResponse::success(['checklist' => $checklist], 'Checklist berhasil diperbarui');
     }
 
-    public function destroyChecklist(Request $request, Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
+    public function destroyChecklist(Aplikasi $aplikasi, AplikasiChecklist $checklist): JsonResponse
     {
         if ((int) $checklist->getAttribute('aplikasi_id') !== (int) $aplikasi->getKey()) {
             return ApiResponse::notFound(self::CHECKLIST_NOT_FOUND_MESSAGE);
@@ -552,29 +552,27 @@ class AplikasiWorkflowController extends Controller
 
     private function deploymentConstraintError(Aplikasi $aplikasi, string $environment, bool $deployed): ?string
     {
-        if (! $deployed) {
-            return null;
-        }
+        $error = null;
 
-        if ($environment === 'staging') {
-            return in_array($aplikasi->getAttribute('status'), [
+        if (! $deployed) {
+            $error = null;
+        } elseif ($environment === 'staging') {
+            $error = in_array($aplikasi->getAttribute('status'), [
                 Aplikasi::STATUS_SIAP_DEPLOY,
                 Aplikasi::STATUS_DEPLOYED_STAGING,
             ], true)
                 ? null
                 : 'Deployment staging hanya dapat dilakukan saat aplikasi berstatus siap deploy.';
-        }
-
-        if (! in_array($aplikasi->getAttribute('status'), [
+        } elseif (! in_array($aplikasi->getAttribute('status'), [
             Aplikasi::STATUS_DEPLOYED_STAGING,
             Aplikasi::STATUS_DEPLOYED_PRODUCTION,
         ], true)) {
-            return 'Deployment production hanya dapat dilakukan setelah aplikasi berstatus deployed staging.';
+            $error = 'Deployment production hanya dapat dilakukan setelah aplikasi berstatus deployed staging.';
+        } elseif ($aplikasi->deployed_staging_at === null) {
+            $error = 'Deployment production hanya dapat dilakukan setelah staging selesai.';
         }
 
-        return $aplikasi->deployed_staging_at === null
-            ? 'Deployment production hanya dapat dilakukan setelah staging selesai.'
-            : null;
+        return $error;
     }
 
     private function applyDeploymentState(
