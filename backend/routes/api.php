@@ -37,6 +37,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     $analisaDesainIdPath = 'analisa-desain/{id}';
     $rfcIdPath = 'rfc/{id}';
     $securityReviewPath = 'aplikasi/{aplikasi}/security-review';
+    $checklistIdPath = '{checklist}';
 
     // Auth routes (available for all authenticated users)
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -131,11 +132,11 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
     });
 
     // Analis desain mengelola checklist kelayakan/analisa pada halaman detail analisa.
-    Route::middleware('role:'.UserRole::ANALIS_DESAIN->value)->group(function () {
-        Route::prefix('aplikasi/{aplikasi}/checklists')->group(function () {
+    Route::middleware('role:'.UserRole::ANALIS_DESAIN->value)->group(function () use ($checklistIdPath) {
+        Route::prefix('aplikasi/{aplikasi}/checklists')->group(function () use ($checklistIdPath) {
             Route::post('', [AplikasiWorkflowController::class, 'storeChecklist']);
-            Route::match(['put', 'patch'], '{checklist}', [AplikasiWorkflowController::class, 'updateChecklist']);
-            Route::delete('{checklist}', [AplikasiWorkflowController::class, 'destroyChecklist']);
+            Route::match(['put', 'patch'], $checklistIdPath, [AplikasiWorkflowController::class, 'updateChecklist']);
+            Route::delete($checklistIdPath, [AplikasiWorkflowController::class, 'destroyChecklist']);
         });
     });
 
@@ -156,12 +157,12 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         'role:'
         .UserRole::TIM_IMPLEMENTASI_APLIKASI->value.','
         .UserRole::DEVOPS_DEVELOPER->value
-    )->group(function () {
-        Route::prefix('aplikasi/{aplikasi}/implementation-checklists')->group(function () {
+    )->group(function () use ($checklistIdPath) {
+        Route::prefix('aplikasi/{aplikasi}/implementation-checklists')->group(function () use ($checklistIdPath) {
             Route::get('', [AplikasiWorkflowController::class, 'implementationIndex']);
             Route::post('', [AplikasiWorkflowController::class, 'implementationStore']);
-            Route::match(['put', 'patch'], '{checklist}', [AplikasiWorkflowController::class, 'implementationUpdate']);
-            Route::delete('{checklist}', [AplikasiWorkflowController::class, 'implementationDestroy']);
+            Route::match(['put', 'patch'], $checklistIdPath, [AplikasiWorkflowController::class, 'implementationUpdate']);
+            Route::delete($checklistIdPath, [AplikasiWorkflowController::class, 'implementationDestroy']);
         });
     });
 
