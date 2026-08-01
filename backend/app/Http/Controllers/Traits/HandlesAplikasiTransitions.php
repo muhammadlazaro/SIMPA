@@ -35,21 +35,22 @@ trait HandlesAplikasiTransitions
         if ($user->role !== 'pengelola_aplikasi') {
             return ApiResponse::forbidden(self::TRANSITION_ACCESS_DENIED_MESSAGE);
         }
+
+        $validated = $request->validate([
+            'status_target' => 'required|string|in:'.Aplikasi::STATUS_TERVERIFIKASI.','.Aplikasi::STATUS_PERLU_PERBAIKAN.','.Aplikasi::STATUS_DITOLAK,
+            'catatan' => 'required|string|max:2000',
+        ]);
+
         if ($aplikasi->status !== Aplikasi::STATUS_DIAJUKAN) {
             return ApiResponse::error('Aplikasi tidak dalam status diajukan.');
         }
 
-        $request->validate([
-            'status_target' => 'required|string|in:'.Aplikasi::STATUS_TERVERIFIKASI.','.Aplikasi::STATUS_PERLU_PERBAIKAN.','.Aplikasi::STATUS_DITOLAK,
-            'catatan' => 'required|string',
-        ]);
-
-        $statusBaru = $request->input('status_target');
+        $statusBaru = $validated['status_target'];
         if ($statusBaru === Aplikasi::STATUS_TERVERIFIKASI && ! $this->hasActiveDocument($aplikasi, AplikasiJenisDokumen::FormulirPengajuan)) {
             return ApiResponse::error('Formulir pengajuan wajib diunggah sebelum pengajuan disetujui.', null, 422);
         }
 
-        $this->recordStatusHistory($aplikasi, 'Verifikasi Pengajuan', $statusBaru, $request->input('catatan'), $user);
+        $this->recordStatusHistory($aplikasi, 'Verifikasi Pengajuan', $statusBaru, $validated['catatan'], $user);
 
         return ApiResponse::success(['status' => $statusBaru], 'Status pengajuan diperbarui.');
     }

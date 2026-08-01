@@ -312,6 +312,7 @@ if [[ "${ENABLE_ORIGIN_TLS}" = "true" ]]; then
 server {
     listen 80;
     server_name ${DOMAIN};
+    server_tokens off;
 
     return 301 https://\$host\$request_uri;
 }
@@ -319,6 +320,7 @@ server {
 server {
     listen 443 ssl http2;
     server_name ${DOMAIN};
+    server_tokens off;
 
     ssl_certificate ${TLS_CERT_PATH};
     ssl_certificate_key ${TLS_KEY_PATH};
@@ -330,7 +332,7 @@ server {
     autoindex off;
     client_max_body_size ${CLIENT_MAX_BODY_SIZE};
 
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://${DOMAIN}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://${DOMAIN}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -367,6 +369,13 @@ server {
         fastcgi_pass unix:${PHP_FPM_SOCKET};
         fastcgi_param SCRIPT_FILENAME ${APP_DIR}/backend/public/index.php;
         fastcgi_param DOCUMENT_ROOT ${APP_DIR}/backend/public;
+        fastcgi_hide_header Content-Security-Policy;
+        fastcgi_hide_header X-Frame-Options;
+        fastcgi_hide_header X-Content-Type-Options;
+        fastcgi_hide_header Referrer-Policy;
+        fastcgi_hide_header Permissions-Policy;
+        fastcgi_hide_header Cross-Origin-Opener-Policy;
+        fastcgi_hide_header Cross-Origin-Resource-Policy;
     }
 
     location ~ /\. {
@@ -379,13 +388,18 @@ else
 server {
     listen 80;
     server_name ${DOMAIN};
+    server_tokens off;
+
+    if (\$http_x_forwarded_proto != "https") {
+        return 301 https://\$host\$request_uri;
+    }
 
     root ${APP_DIR}/frontend/dist;
     index index.html;
     autoindex off;
     client_max_body_size ${CLIENT_MAX_BODY_SIZE};
 
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://${DOMAIN}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://${DOMAIN}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -422,6 +436,13 @@ server {
         fastcgi_pass unix:${PHP_FPM_SOCKET};
         fastcgi_param SCRIPT_FILENAME ${APP_DIR}/backend/public/index.php;
         fastcgi_param DOCUMENT_ROOT ${APP_DIR}/backend/public;
+        fastcgi_hide_header Content-Security-Policy;
+        fastcgi_hide_header X-Frame-Options;
+        fastcgi_hide_header X-Content-Type-Options;
+        fastcgi_hide_header Referrer-Policy;
+        fastcgi_hide_header Permissions-Policy;
+        fastcgi_hide_header Cross-Origin-Opener-Policy;
+        fastcgi_hide_header Cross-Origin-Resource-Policy;
     }
 
     location ~ /\. {

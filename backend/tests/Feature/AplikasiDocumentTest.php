@@ -14,6 +14,7 @@ class AplikasiDocumentTest extends TestCase
     use RefreshDatabase;
 
     private const AUTH_HEADER_PREFIX = 'Bearer ';
+
     private const PDF_MIME_TYPE = 'application/pdf';
 
     protected function setUp(): void
@@ -95,6 +96,29 @@ class AplikasiDocumentTest extends TestCase
         $ownerToken = $owner->createToken('owner')->plainTextToken;
         $this->withHeader('Authorization', self::AUTH_HEADER_PREFIX.$ownerToken)
             ->get("/api/aplikasi/{$otherApp->id}/documents/{$document->id}/preview")
+            ->assertNotFound();
+    }
+
+    public function test_document_preview_rejects_storage_path_outside_document_directory(): void
+    {
+        $pengelola = User::factory()->create(['role' => 'pengelola_aplikasi']);
+        $app = Aplikasi::factory()->create();
+        $document = $app->documents()->create([
+            'document_type' => 'formulir_pengajuan',
+            'storage_path' => '../.env',
+            'storage_disk' => 'local',
+            'original_filename' => 'dokumen.pdf',
+            'mime_type' => self::PDF_MIME_TYPE,
+            'file_size' => 10,
+            'version' => 1,
+            'status' => 'active',
+            'uploaded_by' => $pengelola->id,
+        ]);
+
+        $this->withHeader(
+            'Authorization',
+            self::AUTH_HEADER_PREFIX.$pengelola->createToken('t')->plainTextToken
+        )->get("/api/aplikasi/{$app->id}/documents/{$document->id}/preview")
             ->assertNotFound();
     }
 

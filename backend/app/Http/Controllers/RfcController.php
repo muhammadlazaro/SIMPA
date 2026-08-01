@@ -26,6 +26,7 @@ class RfcController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'aplikasi_id' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
 
         $query = Rfc::with(['aplikasi:id,nama_aplikasi', 'creator:id,name', 'updater:id,name']);
@@ -36,7 +37,7 @@ class RfcController extends Controller
             $escaped = QueryHelper::escapeLike($search);
             $query->where(function ($q) use ($escaped) {
                 $q->where('deskripsi', 'like', "%{$escaped}%")
-                  ->orWhere('tipe_rfc', 'like', "%{$escaped}%");
+                    ->orWhere('tipe_rfc', 'like', "%{$escaped}%");
             });
         }
 
@@ -137,7 +138,7 @@ class RfcController extends Controller
             }
 
             Log::info('RFC created', [
-                'rfc_id'  => $rfc->getKey(),
+                'rfc_id' => $rfc->getKey(),
                 'user_id' => $request->user()?->getKey(),
             ]);
 
@@ -148,9 +149,10 @@ class RfcController extends Controller
             }
 
             Log::error('Failed to create RFC', [
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal membuat RFC.', null, 500);
         }
     }
@@ -198,6 +200,7 @@ class RfcController extends Controller
                 }
 
                 $rfc->update($payload);
+
                 return $rfc;
             });
 
@@ -206,7 +209,7 @@ class RfcController extends Controller
             }
 
             Log::info('RFC updated', [
-                'rfc_id'  => $rfc->getKey(),
+                'rfc_id' => $rfc->getKey(),
                 'changes' => array_keys($payload),
                 'user_id' => $request->user()?->getKey(),
             ]);
@@ -218,10 +221,11 @@ class RfcController extends Controller
             }
 
             Log::error('Failed to update RFC', [
-                'rfc_id'  => $id,
-                'error'   => $e->getMessage(),
+                'rfc_id' => $id,
+                'error' => $e->getMessage(),
                 'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal memperbarui RFC.', null, 500);
         }
     }
@@ -234,7 +238,7 @@ class RfcController extends Controller
                 $path = $rfc->getAttribute('formulir_path');
 
                 Log::warning('RFC permanently deleted', [
-                    'rfc_id'  => $rfc->getKey(),
+                    'rfc_id' => $rfc->getKey(),
                     'user_id' => $request->user()?->getKey(),
                 ]);
 
@@ -250,10 +254,11 @@ class RfcController extends Controller
             return ApiResponse::success(null, 'RFC berhasil dihapus');
         } catch (\Exception $e) {
             Log::error('Failed to delete RFC', [
-                'rfc_id'  => $id,
-                'error'   => $e->getMessage(),
+                'rfc_id' => $id,
+                'error' => $e->getMessage(),
                 'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal menghapus RFC.', null, 500);
         }
     }

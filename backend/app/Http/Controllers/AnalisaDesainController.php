@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Helpers\ApiResponse;
+use App\Http\Helpers\QueryHelper;
+use App\Http\Requests\StoreAnalisaDesainRequest;
+use App\Http\Requests\UpdateAnalisaDesainRequest;
 use App\Models\AnalisaDesain;
 use App\Models\Aplikasi;
 use App\Services\AutoGenerationService;
-use App\Http\Requests\StoreAnalisaDesainRequest;
-use App\Http\Requests\UpdateAnalisaDesainRequest;
-use App\Http\Helpers\ApiResponse;
-use App\Http\Helpers\QueryHelper;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,39 +22,48 @@ class AnalisaDesainController extends Controller
     {
         $this->autoGenerationService = $autoGenerationService;
     }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'aplikasi_id' => ['nullable', 'integer', 'min:1'],
+            'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+        ]);
+
         $query = AnalisaDesain::query();
 
-        if ($request->filled('aplikasi_id')) {
-            $query->where('aplikasi_id', $request->aplikasi_id);
+        if (isset($validated['aplikasi_id'])) {
+            $query->where('aplikasi_id', $validated['aplikasi_id']);
         }
 
-        if ($search = $request->get('q')) {
+        if ($search = ($validated['q'] ?? null)) {
             $escaped = QueryHelper::escapeLike($search);
-            $query->where(function($q) use ($escaped) {
+            $query->where(function ($q) use ($escaped) {
                 $q->where('ui_platform', 'like', "%{$escaped}%")
-                  ->orWhere('interop_type', 'like', "%{$escaped}%")
-                  ->orWhere('storage_type', 'like', "%{$escaped}%")
-                  ->orWhere('nama_aktor', 'like', "%{$escaped}%")
-                  ->orWhere('method', 'like', "%{$escaped}%")
-                  ->orWhere('url', 'like', "%{$escaped}%")
-                  ->orWhere('tipe_resource', 'like', "%{$escaped}%")
-                  ->orWhere('aktor_transaksi', 'like', "%{$escaped}%")
+                    ->orWhere('interop_type', 'like', "%{$escaped}%")
+                    ->orWhere('storage_type', 'like', "%{$escaped}%")
+                    ->orWhere('nama_aktor', 'like', "%{$escaped}%")
+                    ->orWhere('method', 'like', "%{$escaped}%")
+                    ->orWhere('url', 'like', "%{$escaped}%")
+                    ->orWhere('tipe_resource', 'like', "%{$escaped}%")
+                    ->orWhere('aktor_transaksi', 'like', "%{$escaped}%")
                   // Search by application name
-                  ->orWhereHas('aplikasi', function($appQuery) use ($escaped) {
-                      $appQuery->where('nama_aplikasi', 'like', "%{$escaped}%")
-                               ->orWhere('nama_layanan', 'like', "%{$escaped}%")
-                               ->orWhere('nama_singkat', 'like', "%{$escaped}%");
-                  });
+                    ->orWhereHas('aplikasi', function ($appQuery) use ($escaped) {
+                        $appQuery->where('nama_aplikasi', 'like', "%{$escaped}%")
+                            ->orWhere('nama_layanan', 'like', "%{$escaped}%")
+                            ->orWhere('nama_singkat', 'like', "%{$escaped}%");
+                    });
             });
         }
 
-        $perPage = min(100, max(1, (int) $request->get('per_page', 15)));
+        $perPage = (int) ($validated['per_page'] ?? 15);
         $items = $query->with('aplikasi')->orderByDesc('id')->paginate($perPage);
+
         return ApiResponse::paginated($items);
     }
 
@@ -97,7 +106,7 @@ class AnalisaDesainController extends Controller
     public function store(StoreAnalisaDesainRequest $request): JsonResponse
     {
         $item = AnalisaDesain::create($request->validated());
-        
+
         return ApiResponse::created(
             $item->load('aplikasi'),
             'Analisa desain berhasil disimpan'
@@ -110,6 +119,7 @@ class AnalisaDesainController extends Controller
     public function show(string $id): JsonResponse
     {
         $item = AnalisaDesain::with('aplikasi')->findOrFail($id);
+
         return ApiResponse::success($item);
     }
 
@@ -122,7 +132,7 @@ class AnalisaDesainController extends Controller
             return DB::transaction(function () use ($request, $id) {
                 $item = AnalisaDesain::findOrFail($id);
                 $item->update($request->validated());
-                
+
                 return ApiResponse::success(
                     $item->load('aplikasi'),
                     'Analisa desain berhasil diperbarui'
@@ -131,8 +141,9 @@ class AnalisaDesainController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to update analisa desain', [
                 'analisa_desain_id' => $id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Gagal memperbarui analisa desain', null, 500);
         }
     }
@@ -146,14 +157,15 @@ class AnalisaDesainController extends Controller
             return DB::transaction(function () use ($id) {
                 $item = AnalisaDesain::findOrFail($id);
                 $item->delete();
-                
+
                 return ApiResponse::success(null, 'Analisa desain berhasil dihapus');
             });
         } catch (\Exception $e) {
             Log::error('Failed to delete analisa desain', [
                 'analisa_desain_id' => $id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Gagal menghapus analisa desain', null, 500);
         }
     }
@@ -164,61 +176,62 @@ class AnalisaDesainController extends Controller
      */
     public function batchUpdate(Request $request, string $aplikasiId): JsonResponse
     {
-        $request->validate([
-            'items' => 'required|array',
-            'items.*.ui_platform' => 'nullable|in:dws,layanan',
-            'items.*.interop_type' => 'nullable|string|max:255',
-            'items.*.storage_type' => 'nullable|in:db,object-storage',
-            'items.*.nama_aktor' => 'nullable|string|max:255',
-            'items.*.method' => 'nullable|in:GET,POST,PUT,DELETE,PATCH',
-            'items.*.url' => 'nullable|string|max:500',
-            'items.*.tipe_resource' => 'nullable|in:terbuka,tertutup',
-            'items.*.aktor_transaksi' => 'nullable|string|max:255',
+        $validated = $request->validate([
+            'items' => ['required', 'array', 'max:100'],
+            'items.*.ui_platform' => ['nullable', 'in:dws,layanan'],
+            'items.*.interop_type' => ['nullable', 'string', 'max:255', 'regex:/^[\pL\pN][\pL\pN .,_:\/()&+\-]*$/u'],
+            'items.*.storage_type' => ['nullable', 'in:db,object-storage'],
+            'items.*.nama_aktor' => ['nullable', 'string', 'max:255'],
+            'items.*.method' => ['nullable', 'in:GET,POST,PUT,DELETE,PATCH'],
+            'items.*.url' => ['nullable', 'string', 'max:500'],
+            'items.*.tipe_resource' => ['nullable', 'in:terbuka,tertutup'],
+            'items.*.aktor_transaksi' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
-            return DB::transaction(function () use ($request, $aplikasiId) {
+            return DB::transaction(function () use ($request, $validated, $aplikasiId) {
                 // Verify aplikasi exists
                 Aplikasi::findOrFail($aplikasiId);
-                
+
                 // Delete all existing analisa desain for this aplikasi (except UI Platform)
                 AnalisaDesain::where('aplikasi_id', $aplikasiId)
                     ->whereNull('ui_platform') // Keep auto-generated UI Platform
                     ->delete();
-                
+
                 $user = $request->user();
                 $userId = $user?->getKey();
 
                 // Bulk insert new data — pass userId so created_by gets set
                 // (Model::insert() bypasses Eloquent events, so we must set it manually)
-                $items = $this->buildBatchRows((array) $request->input('items', []), $aplikasiId, $userId);
-                
-                if (!empty($items)) {
+                $items = $this->buildBatchRows($validated['items'], $aplikasiId, $userId);
+
+                if (! empty($items)) {
                     AnalisaDesain::insert($items);
                 }
-                
+
                 Log::info('Analisa desain batch updated', [
                     'aplikasi_id' => $aplikasiId,
                     'items_count' => count($items),
-                    'user_id' => $userId
+                    'user_id' => $userId,
                 ]);
-                
+
                 return ApiResponse::success([
                     'count' => count($items),
-                    'aplikasi_id' => $aplikasiId
+                    'aplikasi_id' => $aplikasiId,
                 ], 'Data analisa desain berhasil diupdate');
             });
         } catch (\Exception $e) {
             Log::error('Failed to batch update analisa desain', [
                 'aplikasi_id' => $aplikasiId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Gagal mengupdate data', null, 500);
         }
     }
 
     /**
-     * @param array<int, int|string> $ids
+     * @param  array<int, int|string>  $ids
      * @return array<string, array{ui: array<int, string>, interop: array<int, string>, storage: array<int, string>, aktor: array<int, string>, transaksiCount: int}>
      */
     private function initializeSummaryByIds(array $ids): array
@@ -238,12 +251,12 @@ class AnalisaDesainController extends Controller
     }
 
     /**
-     * @param array<string, array{ui: array<int, string>, interop: array<int, string>, storage: array<int, string>, aktor: array<int, string>, transaksiCount: int}> $summary
+     * @param  array<string, array{ui: array<int, string>, interop: array<int, string>, storage: array<int, string>, aktor: array<int, string>, transaksiCount: int}>  $summary
      */
     private function appendSummaryRow(array &$summary, object $row): void
     {
         $aplikasiId = (string) ($row->aplikasi_id ?? '');
-        if (!isset($summary[$aplikasiId])) {
+        if (! isset($summary[$aplikasiId])) {
             return;
         }
 
@@ -258,7 +271,7 @@ class AnalisaDesainController extends Controller
     }
 
     /**
-     * @param array<int, string> $bucket
+     * @param  array<int, string>  $bucket
      */
     private function appendUniqueString(array &$bucket, string $value): void
     {
@@ -271,14 +284,14 @@ class AnalisaDesainController extends Controller
     }
 
     /**
-     * @param array<int, array<string, mixed>> $inputItems
+     * @param  array<int, array<string, mixed>>  $inputItems
      * @return array<int, array<string, mixed>>
      */
-    private function buildBatchRows(array $inputItems, string $aplikasiId, int|null $userId = null): array
+    private function buildBatchRows(array $inputItems, string $aplikasiId, ?int $userId = null): array
     {
         $rows = [];
         foreach ($inputItems as $item) {
-            if (!$this->hasAnyValue($item)) {
+            if (! $this->hasAnyValue($item)) {
                 continue;
             }
 
@@ -289,7 +302,7 @@ class AnalisaDesainController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $item
+     * @param  array<string, mixed>  $item
      */
     private function hasAnyValue(array $item): bool
     {
@@ -303,10 +316,10 @@ class AnalisaDesainController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $item
+     * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function normalizeBatchRow(array $item, string $aplikasiId, int|null $userId = null): array
+    private function normalizeBatchRow(array $item, string $aplikasiId, ?int $userId = null): array
     {
         $now = now();
 
@@ -325,5 +338,4 @@ class AnalisaDesainController extends Controller
             'updated_at' => $now,
         ];
     }
-
 }

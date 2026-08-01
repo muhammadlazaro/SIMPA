@@ -138,7 +138,7 @@ class AplikasiDocumentController extends Controller
         $disk = Storage::disk($diskName);
         $path = (string) $document->getAttribute('storage_path');
 
-        if ($path === '' || ! $disk->exists($path)) {
+        if (! $this->isSafeDocumentPath($path) || ! $disk->exists($path)) {
             return ApiResponse::notFound('File dokumen tidak ditemukan.');
         }
 
@@ -189,6 +189,16 @@ class AplikasiDocumentController extends Controller
         $disk = (string) ($document->getAttribute('storage_disk') ?: 'public');
 
         return in_array($disk, ['local', 'public'], true) ? $disk : 'public';
+    }
+
+    private function isSafeDocumentPath(string $path): bool
+    {
+        $normalized = str_replace('\\', '/', trim($path));
+
+        return $normalized !== ''
+            && str_starts_with($normalized, 'aplikasi_documents/')
+            && ! str_contains($normalized, "\0")
+            && preg_match('#(?:^|/)\.\.(?:/|$)#', $normalized) !== 1;
     }
 
     private function notifyPengelolaForUatDocument(Aplikasi $aplikasi, ?User $uploader): void

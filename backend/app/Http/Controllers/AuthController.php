@@ -3,16 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Enums\UserRole;
-use App\Models\User;
 use App\Http\Helpers\ApiResponse;
-use Illuminate\Http\Request;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -23,20 +22,20 @@ class AuthController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required|string',
+            'password' => 'required|string|max:128',
         ]);
 
         $email = (string) $request->input('email');
         $user = User::where('email', $email)->first();
 
-        if (!$user || !Hash::check((string) $request->input('password'), (string) $user->getAuthPassword())) {
+        if (! $user || ! Hash::check((string) $request->input('password'), (string) $user->getAuthPassword())) {
             // Log failed login attempt
             Log::warning('Failed login attempt', [
                 'email' => $email,
                 'ip' => $request->ip(),
-                'user_agent' => $request->userAgent()
+                'user_agent' => $request->userAgent(),
             ]);
-            
+
             throw ValidationException::withMessages([
                 'email' => ['Kredensial tidak valid.'],
             ]);
@@ -51,7 +50,7 @@ class AuthController extends Controller
             'email' => $user->getAttribute('email'),
             'role' => $user->getAttribute('role'),
             'ip' => $request->ip(),
-            'user_agent' => $request->userAgent()
+            'user_agent' => $request->userAgent(),
         ]);
 
         return ApiResponse::success([
@@ -61,7 +60,7 @@ class AuthController extends Controller
                 'name' => $user->getAttribute('name'),
                 'email' => $user->getAttribute('email'),
                 'role' => $user->getAttribute('role'),
-            ]
+            ],
         ], 'Login berhasil');
     }
 
@@ -71,13 +70,13 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         // Log logout
         Log::info('User logged out', [
             'user_id' => $user?->getKey(),
-            'email' => $user?->getAttribute('email')
+            'email' => $user?->getAttribute('email'),
         ]);
-        
+
         $request->user()->currentAccessToken()->delete();
 
         return ApiResponse::success(null, 'Logout berhasil');
@@ -89,7 +88,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         return ApiResponse::success([
             'id' => $user?->getKey(),
             'name' => $user?->getAttribute('name'),

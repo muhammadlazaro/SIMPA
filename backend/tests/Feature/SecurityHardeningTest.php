@@ -27,10 +27,17 @@ class SecurityHardeningTest extends TestCase
         $csp = (string) $response->headers->get('Content-Security-Policy');
 
         $this->assertStringContainsString("script-src 'self'", $csp);
+        $this->assertStringContainsString("style-src 'self'", $csp);
+        $this->assertStringContainsString("img-src 'self' data: blob:", $csp);
         $this->assertStringContainsString("object-src 'none'", $csp);
         $this->assertStringContainsString("frame-ancestors 'none'", $csp);
+        $this->assertStringNotContainsString("'unsafe-inline'", $csp);
         $this->assertStringNotContainsString("'unsafe-eval'", $csp);
+        $this->assertStringNotContainsString("img-src 'self' data: https:", $csp);
         $this->assertStringNotContainsString('http://localhost:5173', $csp);
+
+        // TLS is terminated by Nginx/Cloudflare; Laravel must not add a duplicate HSTS header.
+        $response->assertHeaderMissing('Strict-Transport-Security');
     }
 
     public function test_rate_limit_response_does_not_disclose_exception_details(): void
@@ -54,5 +61,39 @@ class SecurityHardeningTest extends TestCase
             ->assertJsonMissingPath('file')
             ->assertJsonMissingPath('line')
             ->assertJsonMissingPath('trace');
+    }
+
+    public function test_wrong_http_method_returns_405_without_exception_details(): void
+    {
+        $response = $this->getJson('/api/login');
+
+        $response->assertStatus(405)
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertJson([
+                'success' => false,
+                'message' => 'Metode HTTP tidak diizinkan untuk endpoint ini',
+            ])
+            ->assertJsonMissingPath('file')
+            ->assertJsonMissingPath('line')
+            ->assertJsonMissingPath('trace');
+    }
+
+    public function test_deployment_templates_enforce_transport_and_header_hardening(): void
+    {
+        $deployScript = file_get_contents(base_path('../deploy.sh'));
+
+        $this->assertIsString($deployScript);
+        $this->assertStringContainsString('server_tokens off;', $deployScript);
+        $this->assertStringContainsString('if (\$http_x_forwarded_proto != "https")', $deployScript);
+        $this->assertStringContainsString('return 301 https://\$host\$request_uri;', $deployScript);
+        $this->assertSame(2, substr_count($deployScript, 'add_header Strict-Transport-Security'));
+        $this->assertSame(2, substr_count($deployScript, 'fastcgi_hide_header Content-Security-Policy'));
+        $this->assertStringContainsString("style-src 'self';", $deployScript);
+        $this->assertStringContainsString("img-src 'self' data: blob:;", $deployScript);
+        $this->assertStringNotContainsString("style-src 'self' 'unsafe-inline'", $deployScript);
+
+        $robotsPath = base_path('../frontend/public/robots.txt');
+        $this->assertFileExists($robotsPath);
+        $this->assertStringContainsString('Disallow: /api/', (string) file_get_contents($robotsPath));
     }
 }

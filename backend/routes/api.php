@@ -149,7 +149,8 @@ Route::middleware(['auth:sanctum', 'throttle:60,1', 'sanitize', 'log.requests'])
         Route::put($analisaDesainIdPath, [AnalisaDesainController::class, 'update']);
         Route::patch($analisaDesainIdPath, [AnalisaDesainController::class, 'update']);
         Route::delete($analisaDesainIdPath, [AnalisaDesainController::class, 'destroy']);
-        Route::put('analisa-desain/batch/{aplikasiId}', [AnalisaDesainController::class, 'batchUpdate']);
+        Route::put('analisa-desain/batch/{aplikasiId}', [AnalisaDesainController::class, 'batchUpdate'])
+            ->whereNumber('aplikasiId');
     });
 
     // Tim implementasi (frontend/backend/devops)

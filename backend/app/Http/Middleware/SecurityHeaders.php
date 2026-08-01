@@ -44,8 +44,8 @@ class SecurityHeaders
         $csp = [
             "default-src 'self'",
             "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
+            "style-src 'self'",
+            "img-src 'self' data: blob:",
             "font-src 'self' data:",
             'connect-src '.implode(' ', $connectSources),
             "object-src 'none'",
@@ -60,11 +60,6 @@ class SecurityHeaders
         // Permissions Policy (formerly Feature Policy)
         $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
         
-        // HSTS (only in production with HTTPS)
-        if ($isProduction) {
-            $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-        }
-
         // OWASP: Disable client-side caching on API responses containing sensitive data
         $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate');
         $response->headers->set('Pragma', 'no-cache');

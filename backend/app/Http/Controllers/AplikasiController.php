@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\InvalidAplikasiTransitionException;
-use App\Enums\AplikasiStatus;
 use App\Enums\AplikasiJenisDokumen;
-use App\Http\Requests\StoreAplikasiRequest;
-use App\Http\Requests\UpdateAplikasiRequest;
+use App\Enums\AplikasiStatus;
+use App\Exceptions\InvalidAplikasiTransitionException;
 use App\Http\Helpers\ApiResponse;
 use App\Http\Helpers\QueryHelper;
+use App\Http\Requests\StoreAplikasiRequest;
+use App\Http\Requests\UpdateAplikasiRequest;
 use App\Models\Aplikasi;
 use App\Models\Rfc;
 use App\Services\AutoGenerationService;
@@ -25,6 +25,7 @@ class AplikasiController extends Controller
     public function __construct(
         protected AutoGenerationService $autoGenerationService
     ) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -41,6 +42,7 @@ class AplikasiController extends Controller
                 }
             }],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
 
         $query = Aplikasi::query();
@@ -62,13 +64,13 @@ class AplikasiController extends Controller
         $search = trim((string) ($validated['q'] ?? ''));
         if ($search !== '') {
             $escaped = QueryHelper::escapeLike($search);
-            $query->where(function($q) use ($escaped) {
+            $query->where(function ($q) use ($escaped) {
                 $q->where('nama_layanan', 'like', "%{$escaped}%")
-                  ->orWhere('nama_singkat', 'like', "%{$escaped}%")
-                  ->orWhere('nama_aplikasi', 'like', "%{$escaped}%")
-                  ->orWhere('kode_unitOrganisasi', 'like', "%{$escaped}%")
-                  ->orWhere('tipe_akuisisi', 'like', "%{$escaped}%")
-                  ->orWhere('status', 'like', "%{$escaped}%");
+                    ->orWhere('nama_singkat', 'like', "%{$escaped}%")
+                    ->orWhere('nama_aplikasi', 'like', "%{$escaped}%")
+                    ->orWhere('kode_unitOrganisasi', 'like', "%{$escaped}%")
+                    ->orWhere('tipe_akuisisi', 'like', "%{$escaped}%")
+                    ->orWhere('status', 'like', "%{$escaped}%");
             });
         }
 
@@ -82,6 +84,7 @@ class AplikasiController extends Controller
 
         $perPage = (int) ($validated['per_page'] ?? 20);
         $items = $query->orderByDesc('id')->paginate($perPage);
+
         return ApiResponse::paginated($items);
     }
 
@@ -208,7 +211,7 @@ class AplikasiController extends Controller
                     'aplikasi_id' => $item->getKey(),
                     'nama_aplikasi' => $item->getAttribute('nama_aplikasi'),
                     'user_id' => $request->user()?->getKey(),
-                    'user_email' => $request->user()?->getAttribute('email')
+                    'user_email' => $request->user()?->getAttribute('email'),
                 ]);
 
                 return $item;
@@ -220,8 +223,9 @@ class AplikasiController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to create aplikasi', [
                 'error' => $e->getMessage(),
-                'user_id' => $request->user()?->getKey()
+                'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal menyimpan data', null, 500);
         }
     }
@@ -247,7 +251,7 @@ class AplikasiController extends Controller
             'notes.checker:id,name',
             'creator:id,name',
             'updater:id,name',
-            'securityTester:id,name'
+            'securityTester:id,name',
         ]);
 
         $user = $request->user();
@@ -256,6 +260,7 @@ class AplikasiController extends Controller
         }
 
         $item = $query->findOrFail($id);
+
         return ApiResponse::success($item);
     }
 
@@ -286,7 +291,7 @@ class AplikasiController extends Controller
                     'nama_aplikasi' => $item->getAttribute('nama_aplikasi'),
                     'changes' => $request->validated(),
                     'user_id' => $request->user()?->getKey(),
-                    'user_email' => $request->user()?->getAttribute('email')
+                    'user_email' => $request->user()?->getAttribute('email'),
                 ]);
 
                 if ($oldJenisLayanan !== $newJenisLayanan) {
@@ -305,8 +310,9 @@ class AplikasiController extends Controller
             Log::error('Failed to update aplikasi', [
                 'aplikasi_id' => $id,
                 'error' => $e->getMessage(),
-                'user_id' => $request->user()?->getKey()
+                'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal mengupdate data', null, 500);
         }
     }
@@ -346,7 +352,7 @@ class AplikasiController extends Controller
                     'aplikasi_id' => $item->getKey(),
                     'nama_aplikasi' => $item->getAttribute('nama_aplikasi'),
                     'user_id' => $request->user()?->getKey(),
-                    'user_email' => $request->user()?->getAttribute('email')
+                    'user_email' => $request->user()?->getAttribute('email'),
                 ]);
 
                 $item->notifications()->delete();
@@ -374,8 +380,9 @@ class AplikasiController extends Controller
             Log::error('Failed to delete aplikasi', [
                 'aplikasi_id' => $id,
                 'error' => $e->getMessage(),
-                'user_id' => $request->user()?->getKey()
+                'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal menghapus data aplikasi', null, 500);
         }
     }
@@ -420,6 +427,7 @@ class AplikasiController extends Controller
                 'error' => $e->getMessage(),
                 'user_id' => $user->getKey(),
             ]);
+
             return ApiResponse::error('Gagal menarik pengajuan.', null, 500);
         }
     }
@@ -477,6 +485,7 @@ class AplikasiController extends Controller
                 'error' => $e->getMessage(),
                 'user_id' => $request->user()?->getKey(),
             ]);
+
             return ApiResponse::error('Gagal menonaktifkan aplikasi', null, 500);
         }
     }
@@ -490,19 +499,20 @@ class AplikasiController extends Controller
             $item = Aplikasi::onlyTrashed()->findOrFail($id);
             $item->restore();
             $this->forgetStatsCache();
-            
+
             Log::info('Aplikasi restored', [
                 'aplikasi_id' => $item->getKey(),
                 'nama_aplikasi' => $item->getAttribute('nama_aplikasi'),
-                'user_id' => $request->user()?->getKey()
+                'user_id' => $request->user()?->getKey(),
             ]);
-            
+
             return ApiResponse::success($item, 'Data berhasil dipulihkan');
         } catch (\Exception $e) {
             Log::error('Failed to restore aplikasi', [
                 'aplikasi_id' => $id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Gagal memulihkan data', null, 500);
         }
     }
@@ -516,15 +526,16 @@ class AplikasiController extends Controller
 
         if ($search = $request->get('q')) {
             $escaped = QueryHelper::escapeLike($search);
-            $query->where(function($q) use ($escaped) {
+            $query->where(function ($q) use ($escaped) {
                 $q->where('nama_layanan', 'like', "%{$escaped}%")
-                  ->orWhere('nama_singkat', 'like', "%{$escaped}%")
-                  ->orWhere('nama_aplikasi', 'like', "%{$escaped}%");
+                    ->orWhere('nama_singkat', 'like', "%{$escaped}%")
+                    ->orWhere('nama_aplikasi', 'like', "%{$escaped}%");
             });
         }
 
         $perPage = min(100, max(1, (int) $request->get('per_page', 20)));
         $items = $query->orderByDesc('deleted_at')->paginate($perPage);
+
         return ApiResponse::paginated($items);
     }
 

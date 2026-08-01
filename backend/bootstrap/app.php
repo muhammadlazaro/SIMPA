@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Global middleware - applied to all requests
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
-        
+
         // Middleware aliases
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
@@ -42,7 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
             return $safeJson([
                 'success' => false,
                 'message' => 'Terjadi kesalahan validasi',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         });
 
@@ -58,7 +58,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             return $safeJson([
                 'success' => false,
-                'message' => 'Anda belum melakukan autentikasi'
+                'message' => 'Anda belum melakukan autentikasi',
             ], 401);
         });
 
@@ -75,7 +75,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             return $safeJson([
                 'success' => false,
-                'message' => 'Anda tidak memiliki akses untuk melakukan tindakan ini'
+                'message' => 'Anda tidak memiliki akses untuk melakukan tindakan ini',
             ], 403);
         });
 
@@ -90,7 +90,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             return $safeJson([
                 'success' => false,
-                'message' => 'Terlalu banyak percobaan. Silakan coba lagi nanti.'
+                'message' => 'Terlalu banyak percobaan. Silakan coba lagi nanti.',
             ], 429);
         });
 
@@ -98,7 +98,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->renderable(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e) use ($safeJson) {
             return $safeJson([
                 'success' => false,
-                'message' => 'Data tidak ditemukan'
+                'message' => 'Data tidak ditemukan',
             ], 404);
         });
 
@@ -106,8 +106,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e) use ($safeJson) {
             return $safeJson([
                 'success' => false,
-                'message' => 'Endpoint tidak ditemukan'
+                'message' => 'Endpoint tidak ditemukan',
             ], 404);
+        });
+
+        // Reject unsupported HTTP methods without turning scanner probes into 500 responses.
+        $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException $e) use ($safeJson) {
+            return $safeJson([
+                'success' => false,
+                'message' => 'Metode HTTP tidak diizinkan untuk endpoint ini',
+            ], 405);
         });
 
         // Handle all other exceptions
@@ -117,7 +125,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             // Return generic error in production, detailed in development
@@ -125,13 +133,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $safeJson([
                     'success' => false,
                     'message' => $e->getMessage(),
-                    'type' => class_basename($e)
+                    'type' => class_basename($e),
                 ], 500);
             }
 
             return $safeJson([
                 'success' => false,
-                'message' => 'Terjadi kesalahan pada server'
+                'message' => 'Terjadi kesalahan pada server',
             ], 500);
         });
     })->create();
